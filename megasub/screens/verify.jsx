@@ -21,6 +21,7 @@ import * as SecureStore from 'expo-secure-store';
 
 const { width, height } = Dimensions.get('window');
 
+// Connected production base URL path
 const BASE_URL = 'https://mega-sub.com/api/v1/external';
 const SESSION_KEY = 'megasub_session_token';
 const USER_KEY = 'megasub_user_data';
@@ -145,26 +146,11 @@ const inputStyles = StyleSheet.create({
 });
 
 export default function VerifyScreen({ navigate, route }) {
-  // ✅ FIX: The user data IS the params object
   const userData = route?.params || {};
-  
-  // 🔍 DEBUG: Log what we received
-  console.log('📱 VerifyScreen received userData:', userData);
-  console.log('📱 VerifyScreen userData keys:', Object.keys(userData));
-  console.log('👤 First name:', userData.first_name);
-  console.log('🆔 User ID:', userData.id);
-  console.log('📧 Email:', userData.email);
-  console.log('🔑 Token:', userData.token ? '✅ Present' : '❌ Missing');
 
-  // Extract all fields directly from userData
   const token = userData.token || null;
   const userId = userData.id || userData.userId || null;
-  const first_name = userData.first_name || '';
-  const last_name = userData.last_name || '';
-  const email = userData.email || '';
   const phone_number = userData.phone_number || '';
-  const phone_verification = userData.phone_verification || 0;
-  const username = userData.username || '';
 
   const [modalVisible, setModalVisible] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState(phone_number || '');
@@ -179,12 +165,9 @@ export default function VerifyScreen({ navigate, route }) {
   const [savedUserData, setSavedUserData] = useState(userData || {});
 
   useEffect(() => {
-    // Show modal automatically when screen loads
     if (userIdState) {
       setModalVisible(true);
     }
-    console.log('📱 VerifyScreen savedUserData:', savedUserData);
-    console.log('👤 savedUserData first_name:', savedUserData.first_name);
   }, []);
 
   useEffect(() => {
@@ -206,62 +189,94 @@ export default function VerifyScreen({ navigate, route }) {
 
   function validateOTP() {
     const e = {};
-    if (!otp.trim()) e.otp = 'OTP is required';
+    if (!otp.trim()) e.otp = 'OTP code is required';
     else if (otp.trim().length < 4) e.otp = 'Enter a valid OTP';
     setErrors(e);
     return Object.keys(e).length === 0;
   }
 
+  // 1. Initial Request to Send verification OTP
   async function handleSendOTP() {
     if (!validatePhone()) return;
     
     setLoading(true);
     try {
-      console.log('📱 Simulating OTP send to:', phoneNumber.trim());
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      console.log('📤 Sending phone number validation request to:', `${BASE_URL}/phone_verification`);
+      
+      const res = await fetch(`${BASE_URL}/phone_verification`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          // Pass authorization token if needed by external endpoint gateway setup
+          Authorization: userToken ? `Bearer ${userToken}` : '',
+        },
+        body: JSON.stringify({
+          phone_number: phoneNumber.trim(),
+        }),
+      });
+
+      const json = await res.json();
+      console.log('📥 Send OTP Response Status:', res.status);
+      console.log('📥 Send OTP Response JSON:', json);
+
+      if (!res.ok || json.status === false) {
+        Alert.alert('Error', json.message || 'Failed to send verification code. Please check your number.');
+        return;
+      }
       
       setStep('otp');
       setCountdown(60);
       setResendDisabled(true);
-      Alert.alert('OTP Sent', `A verification code has been sent to ${phoneNumber.trim()}`);
+      Alert.alert('OTP Sent', json.message || `A verification code has been sent to ${phoneNumber.trim()}`);
       
     } catch (err) {
-      console.error('Error:', err);
-      Alert.alert('Error', 'Something went wrong. Please try again.');
+      console.error('❌ Send OTP Network Error:', err);
+      Alert.alert('Network Error', 'Could not connect to server. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
   }
 
+  // 2. Secondary confirmation of OTP
   async function handleVerifyOTP() {
     if (!validateOTP()) return;
     
-    if (otp.trim() !== '1234') {
-      Alert.alert('Invalid OTP', 'Please enter the correct OTP. Demo code is: 1234');
-      return;
-    }
-    
     setLoading(true);
     try {
-      console.log('✅ OTP verified successfully:', otp.trim());
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      console.log('📤 Confirming verification OTP via:', `${BASE_URL}/confirm_phone_verification`);
+
+      const res = await fetch(`${BASE_URL}/confirm_phone_verification`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Authorization: userToken ? `Bearer ${userToken}` : '',
+        },
+        body: JSON.stringify({
+          phone_number: phoneNumber.trim(),
+          otp_code: otp.trim(), // matches verification backend key maps
+        }),
+      });
+
+      const json = await res.json();
+      console.log('📥 Confirm OTP Response Status:', res.status);
+      console.log('📥 Confirm OTP Response JSON:', json);
+
+      if (!res.ok || json.status === false) {
+        Alert.alert('Verification Failed', json.message || 'Invalid or expired OTP code. Please try again.');
+        return;
+      }
       
-      // ✅ Preserve all user data and update phone verification
+      // Update data record mapping layout blocks locally
       const updatedUser = {
-        ...savedUserData,  // Preserve all existing user data
+        ...savedUserData,
         phone_verification: 1,
         phone_number: phoneNumber.trim(),
       };
       
-      console.log('📦 Updated user data before saving:', updatedUser);
-      console.log('👤 Updated first_name:', updatedUser.first_name);
-      console.log('👤 Updated last_name:', updatedUser.last_name);
-      console.log('📧 Updated email:', updatedUser.email);
-      
-      // Save updated user data to SecureStore
       await SecureStore.setItemAsync(USER_KEY, JSON.stringify(updatedUser));
       
-      // Also update the token if provided
       if (userToken) {
         await SecureStore.setItemAsync(SESSION_KEY, userToken);
       }
@@ -271,17 +286,14 @@ export default function VerifyScreen({ navigate, route }) {
           text: 'Continue to Dashboard',
           onPress: () => {
             setModalVisible(false);
-            console.log('📦 Navigating to home with updated user:', updatedUser);
-            console.log('👤 First name being passed to home:', updatedUser.first_name);
-            // ✅ Pass the updated user data to home
             navigate && navigate('home', updatedUser);
           }
         }
       ]);
 
     } catch (err) {
-      console.error('Error:', err);
-      Alert.alert('Error', 'Something went wrong. Please try again.');
+      console.error('❌ Confirm OTP Network Error:', err);
+      Alert.alert('Network Error', 'Verification service unreachable. Check network status.');
     } finally {
       setLoading(false);
     }
@@ -296,8 +308,6 @@ export default function VerifyScreen({ navigate, route }) {
   }
 
   function handleSkip() {
-    console.log('⏭️ Skipping verification, preserving user data:', savedUserData);
-    console.log('👤 First name being passed on skip:', savedUserData.first_name);
     navigate && navigate('home', savedUserData);
   }
 
@@ -455,7 +465,7 @@ export default function VerifyScreen({ navigate, route }) {
                             value={otp}
                             onChangeText={setOtp}
                             keyboardType="number-pad"
-                            maxLength={4}
+                            maxLength={6}
                             error={errors.otp}
                           />
                         </View>
@@ -752,4 +762,4 @@ const styles = StyleSheet.create({
   otpContainer: {
     marginBottom: 4,
   },
-});av
+});

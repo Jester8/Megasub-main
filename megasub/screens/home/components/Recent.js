@@ -6,6 +6,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../../../contexts/ThemeContext';
 
 const FONTS = {
   regular: 'Manrope_400Regular',
@@ -59,7 +60,7 @@ const TRANSACTIONS = [
   },
 ];
 
-function TransactionItem({ tx }) {
+function TransactionItem({ tx, colors }) {
   const isCredit = tx.type === 'credit';
   return (
     <TouchableOpacity style={styles.txItem} activeOpacity={0.75}>
@@ -67,10 +68,10 @@ function TransactionItem({ tx }) {
         <Ionicons name={tx.icon} size={20} color={tx.color} />
       </View>
       <View style={styles.txInfo}>
-        <Text style={styles.txTitle}>{tx.title}</Text>
-        <Text style={styles.txSubtitle}>{tx.subtitle}</Text>
+        <Text style={[styles.txTitle, { color: colors.text }]}>{tx.title}</Text>
+        <Text style={[styles.txSubtitle, { color: colors.textMuted }]}>{tx.subtitle}</Text>
       </View>
-      <Text style={[styles.txAmount, isCredit ? styles.txAmountCredit : styles.txAmountDebit]}>
+      <Text style={[styles.txAmount, isCredit ? styles.txAmountCredit : { color: colors.text }]}>
         {tx.amount}
       </Text>
     </TouchableOpacity>
@@ -78,20 +79,21 @@ function TransactionItem({ tx }) {
 }
 
 export default function RecentTransactions({ onSeeAllPress }) {
+  const { colors } = useTheme();
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
-        <Text style={styles.sectionTitle}>Recent Transactions</Text>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Transactions</Text>
         <TouchableOpacity onPress={onSeeAllPress}>
           <Text style={styles.seeAll}>See all</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.card}>
+      <View style={[styles.card, { backgroundColor: colors.card }]}>
         {TRANSACTIONS.map((tx, index) => (
           <View key={tx.id}>
-            <TransactionItem tx={tx} />
-            {index < TRANSACTIONS.length - 1 && <View style={styles.divider} />}
+            <TransactionItem tx={tx} colors={colors} />
+            {index < TRANSACTIONS.length - 1 && <View style={[styles.divider, { backgroundColor: colors.divider }]} />}
           </View>
         ))}
       </View>
@@ -112,7 +114,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontFamily: FONTS.bold,
-    fontSize: 17,
+    fontSize: 15,
     color: '#0B0D1A',
   },
   seeAll: {
@@ -124,7 +126,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgb(255, 255, 255)',
     borderRadius: 20,
     padding: CARD_PADDING,
-    elevation: 3,
   },
   txItem: {
     flexDirection: 'row',

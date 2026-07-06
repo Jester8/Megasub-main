@@ -4,11 +4,11 @@
     "slug": "megasub",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/splash.png",
+    "icon": "./assets/megasubmain.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/megasubmain.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -18,7 +18,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/splash.png",
+        "foregroundImage": "./assets/megasubmain.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
@@ -26,12 +26,16 @@
       "package": "com.anonymous.megasub"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/megasubmain.png"
     },
     "plugins": [
-      "expo-router",
       "expo-font",
       "expo-secure-store"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "7026c1b3-04f0-4a10-b514-b83a233d8847"
+      }
+    }
   }
 }

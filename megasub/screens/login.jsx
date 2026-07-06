@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 
+// Synchronized production API endpoint URL mapping
 const BASE_URL = 'https://mega-sub.com/api/v1/external';
 const SESSION_KEY = 'megasub_session_token';
 const USER_KEY = 'megasub_user_data';
@@ -142,7 +143,6 @@ export default function LoginScreen({ navigate }) {
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
-    // ✅ Only check if session exists for biometric login, but DO NOT auto-login
     checkSavedSession();
   }, []);
 
@@ -151,14 +151,12 @@ export default function LoginScreen({ navigate }) {
       const token = await SecureStore.getItemAsync(SESSION_KEY);
       setHasSavedSession(!!token);
       
-      // ✅ Just check if session exists, but do NOT auto-navigate
       if (token) {
         const userData = await SecureStore.getItemAsync(USER_KEY);
         if (userData) {
           try {
             const user = JSON.parse(userData);
             console.log('✅ Session found for biometric login:', user.first_name);
-            // ✅ Don't auto-login - just show fingerprint option
           } catch (e) {
             console.log('Error parsing user data:', e);
           }
@@ -170,34 +168,7 @@ export default function LoginScreen({ navigate }) {
     }
   }
 
-  // ✅ NEW: Fetch full user profile
-  async function fetchUserProfile(userId, token) {
-    try {
-      console.log('📤 Fetching user profile for:', userId);
-      const res = await fetch(`${BASE_URL}/user/profile?user_id=${userId}`, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      
-      const json = await res.json();
-      console.log('📥 User profile response:', JSON.stringify(json, null, 2));
-      
-      if (json.status && json.data) {
-        return json.data;
-      }
-      return null;
-    } catch (err) {
-      console.error('Error fetching user profile:', err);
-      return null;
-    }
-  }
-
   async function handleLogin() {
-    // Validate inputs
     const e = {};
     if (!email.trim()) e.email = 'Email is required';
     else if (!/\S+@\S+\.\S+/.test(email)) e.email = 'Enter a valid email';
@@ -207,7 +178,7 @@ export default function LoginScreen({ navigate }) {
 
     setLoading(true);
     try {
-      console.log('📤 Sending login request:', { email, password });
+      console.log('📤 Sending login request to:', `${BASE_URL}/login`);
 
       const res = await fetch(`${BASE_URL}/login`, {
         method: 'POST',
@@ -217,15 +188,14 @@ export default function LoginScreen({ navigate }) {
         },
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
-          password,
+          password: password.trim(), // Trims leading/trailing accidental spaces
           device_name: Platform.OS === 'ios' ? 'iOS Device' : 'Android Device',
         }),
       });
 
       const json = await res.json();
-      console.log('📥 Full API Response:', JSON.stringify(json, null, 2));
+      console.log('📥 Login API Response:', JSON.stringify(json, null, 2));
 
-      // Handle validation errors (422 status code)
       if (res.status === 422 && json.errors) {
         const errorMessages = [];
         Object.keys(json.errors).forEach((field) => {
@@ -241,84 +211,47 @@ export default function LoginScreen({ navigate }) {
         return;
       }
 
-      // Check for API errors
-      if (!res.ok) {
+      if (!res.ok || json.status === false) {
         Alert.alert('Login Failed', json.message || 'Invalid credentials. Please try again.');
         return;
       }
 
-      // Check if status is explicitly false
-      if (json.status === false) {
-        Alert.alert('Login Failed', json.message || 'Invalid credentials. Please try again.');
-        return;
-      }
-
-      // ✅ Extract token and user ID from login response
-      const token = json.data?.token || json.access?.token;
-      const userId = json.data?.user; // This is the user ID string
+      const token = json.access?.token || json.data?.token;
+      const userId = json.data?.id; // Safely maps json.data.id directly
 
       console.log('🔑 Extracted token:', token ? '✅ Present' : '❌ Missing');
       console.log('🆔 Extracted user ID:', userId);
 
       if (!token || !userId) {
-        console.error('❌ Missing token or user ID in response:', json);
-        Alert.alert('Error', 'Unexpected response from server. Please try again.');
+        console.error('❌ Missing token or user ID in response structure:', json);
+        Alert.alert('Error', 'Unexpected response payload from server. Please try again.');
         return;
       }
 
-      // ✅ Fetch full user profile using the token and user ID
-      console.log('📤 Fetching full user profile...');
-      const userProfile = await fetchUserProfile(userId, token);
+      // Extracts complete profile directly from response block
+      const userProfile = json.data;
 
-      if (!userProfile) {
-        console.error('❌ Failed to fetch user profile');
-        Alert.alert('Error', 'Could not fetch user profile. Please try again.');
-        return;
-      }
-
-      // ✅ Combine user ID with profile data
       const userData = {
         id: userId,
         ...userProfile,
-        phone_verification: userProfile.phone_verification || 0,
+        phone_verification: userProfile.phone_verification !== undefined ? Number(userProfile.phone_verification) : 0,
         phone_number: userProfile.phone_number || '',
         first_name: userProfile.first_name || userProfile.name || 'User',
         last_name: userProfile.last_name || '',
         email: userProfile.email || email,
         username: userProfile.username || '',
+        token: token
       };
 
-      console.log('📦 Final user data:', JSON.stringify(userData, null, 2));
-      console.log('👤 User first_name:', userData.first_name);
-      console.log('👤 User last_name:', userData.last_name);
-      console.log('👤 User email:', userData.email);
-      console.log('👤 User ID:', userData.id);
-      console.log('📱 Phone verification:', userData.phone_verification);
-
-      // ✅ Save complete user data to SecureStore
+      // Cache elements inside local SecureStore
       await SecureStore.setItemAsync(SESSION_KEY, token);
       await SecureStore.setItemAsync(USER_KEY, JSON.stringify(userData));
       setHasSavedSession(true);
 
-      // ✅ Verify the data was saved correctly
-      const savedUser = await SecureStore.getItemAsync(USER_KEY);
-      console.log('💾 Verified saved user data:', savedUser);
-      if (savedUser) {
-        const parsedSavedUser = JSON.parse(savedUser);
-        console.log('💾 Saved first_name:', parsedSavedUser.first_name);
-      }
-
-      // ✅ CHECK: Is phone number verified?
       const isPhoneVerified = userData.phone_verification === 1;
 
-      console.log('📱 Phone verification status:', {
-        phone_verification: userData.phone_verification,
-        phone_number: userData.phone_number,
-        isPhoneVerified
-      });
-
       if (!isPhoneVerified) {
-        console.log('📱 Phone not verified, redirecting to verification...');
+        console.log('📱 Phone verification required, routing to Verification panel...');
         Alert.alert(
           'Phone Verification Required',
           'Please verify your phone number to continue.',
@@ -332,7 +265,6 @@ export default function LoginScreen({ navigate }) {
             {
               text: 'Skip',
               onPress: () => {
-                console.log('⏭️ Skipping verification, going to home with:', userData);
                 navigate && navigate('home', userData);
               }
             }
@@ -341,9 +273,7 @@ export default function LoginScreen({ navigate }) {
         return;
       }
 
-      // Phone is verified - proceed to home
-      console.log('✅ Login successful! Navigating to home with user:', userData);
-      console.log('👤 First name being passed to home:', userData.first_name);
+      console.log('✅ Login successful! Moving to dashboard home screen.');
       navigate && navigate('home', userData);
       
     } catch (err) {
@@ -389,14 +319,11 @@ export default function LoginScreen({ navigate }) {
       });
 
       if (result.success) {
-        console.log('Biometric login success, restoring session');
         const userData = await SecureStore.getItemAsync(USER_KEY);
         if (userData) {
           try {
             const user = JSON.parse(userData);
-            
-            // ✅ Check if phone is verified
-            const isPhoneVerified = user.phone_verification === 1;
+            const isPhoneVerified = Number(user.phone_verification) === 1;
             
             if (!isPhoneVerified) {
               Alert.alert(
@@ -428,8 +355,6 @@ export default function LoginScreen({ navigate }) {
         } else {
           navigate && navigate('home', { first_name: 'Returning User' });
         }
-      } else {
-        console.log('Biometric login failed or cancelled:', result.error);
       }
     } catch (err) {
       console.error('Biometric error:', err);
@@ -443,7 +368,6 @@ export default function LoginScreen({ navigate }) {
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
 
-      {/* Soft background glow */}
       <View style={styles.glowTop} pointerEvents="none" />
       <View style={styles.glowBottom} pointerEvents="none" />
 
@@ -456,7 +380,6 @@ export default function LoginScreen({ navigate }) {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Logo */}
           <View style={styles.logoWrap}>
             <Image
               source={require('../assets/logo.png')}
@@ -465,13 +388,11 @@ export default function LoginScreen({ navigate }) {
             />
           </View>
 
-          {/* Heading */}
           <Text style={styles.heading}>Welcome back to Megasub</Text>
           <Text style={styles.subheading}>
             Log in to continue where you left off
           </Text>
 
-          {/* Google button */}
           <TouchableOpacity
             style={styles.googleBtn}
             onPress={handleGoogle}
@@ -487,7 +408,6 @@ export default function LoginScreen({ navigate }) {
             <Text style={styles.googleText}>Continue with Google</Text>
           </TouchableOpacity>
 
-          {/* Divider */}
           <View style={styles.dividerRow}>
             <View style={styles.dividerLine} />
             <Text style={styles.dividerText}>or log in with email</Text>
@@ -512,7 +432,6 @@ export default function LoginScreen({ navigate }) {
             error={errors.password}
           />
 
-          {/* Forgot password */}
           <TouchableOpacity
             style={styles.forgotRow}
             onPress={() => navigate && navigate('reset')}
@@ -520,7 +439,6 @@ export default function LoginScreen({ navigate }) {
             <Text style={styles.forgotText}>Forgot password?</Text>
           </TouchableOpacity>
 
-          {/* Login button */}
           <TouchableOpacity
             style={[styles.loginBtn, loading && styles.loginBtnDisabled]}
             onPress={handleLogin}
@@ -534,7 +452,6 @@ export default function LoginScreen({ navigate }) {
             )}
           </TouchableOpacity>
 
-          {/* Fingerprint login — greyed out until a session has been saved */}
           <TouchableOpacity
             style={[
               styles.fingerprintBtn,
@@ -559,7 +476,6 @@ export default function LoginScreen({ navigate }) {
             </Text>
           </TouchableOpacity>
 
-          {/* Signup link */}
           <View style={styles.signupRow}>
             <Text style={styles.signupText}>Don't have an account? </Text>
             <TouchableOpacity onPress={() => navigate && navigate('signup')}>

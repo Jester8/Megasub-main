@@ -19,10 +19,17 @@ const FONTS = {
   extrabold: 'Manrope_800ExtraBold',
 };
 
-export default function WalletCard({ balance, onTopUp }) {
+// Expects userData object containing your dashboard payload fields (passed down from navigation/parent context)
+export default function WalletCard({ userData, onTopUp }) {
   const [hidden, setHidden] = useState(false);
 
-  const formatted = '₦' + (balance || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  // Safely extract main_wallet balance string and convert it to float (handles "0" string types from API payload)
+  const walletBalance = userData?.main_wallet ? parseFloat(userData.main_wallet) : 0.00;
+  
+  // Safely extract username or fallback safely if missing
+  const userAccountIdentifier = userData?.username || 'User Account';
+
+  const formatted = '₦' + walletBalance.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
   return (
     <View style={styles.wrapper}>
@@ -32,6 +39,7 @@ export default function WalletCard({ balance, onTopUp }) {
         end={{ x: 1, y: 1 }}
         style={styles.card}
       >
+        {/* Visual background element shapes */}
         <View style={styles.circle1} />
         <View style={styles.circle2} />
         <View style={styles.circle3} />
@@ -59,8 +67,8 @@ export default function WalletCard({ balance, onTopUp }) {
 
         <View style={styles.bottomRow}>
           <View>
-            <Text style={styles.acctLabel}>Account ID</Text>
-            <Text style={styles.acctValue}>MEG-20847</Text>
+            <Text style={styles.acctLabel}>Username</Text>
+            <Text style={styles.acctValue}>{userAccountIdentifier}</Text>
           </View>
           <TouchableOpacity style={styles.topUpBtn} onPress={onTopUp} activeOpacity={0.85}>
             <Ionicons name="add" size={16} color="#4A55DD" />

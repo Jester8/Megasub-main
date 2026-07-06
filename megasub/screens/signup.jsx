@@ -14,6 +14,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 
 const BASE_URL = 'https://mega-sub.com/api/v1/external';
@@ -137,6 +138,7 @@ const inputStyles = StyleSheet.create({
 });
 
 export default function SignupScreen({ navigate }) {
+  const insets = useSafeAreaInsets();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [username, setUsername] = useState('');
@@ -297,13 +299,10 @@ export default function SignupScreen({ navigate }) {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
+        {/* Fixed header: logo + heading + Google button never scroll away */}
+        <View style={[styles.header, { paddingTop: insets.top + 24 }]}>
           <View style={styles.logoWrap}>
             <Image
               source={require('../assets/logo.png')}
@@ -335,7 +334,13 @@ export default function SignupScreen({ navigate }) {
             <Text style={styles.dividerText}>or sign up with email</Text>
             <View style={styles.dividerLine} />
           </View>
+        </View>
 
+        <ScrollView
+          contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.nameRow}>
             <View style={styles.nameField}>
               <FormInput
@@ -435,8 +440,6 @@ export default function SignupScreen({ navigate }) {
               <Text style={styles.loginLink}>Click here to login</Text>
             </TouchableOpacity>
           </View>
-
-          <View style={{ height: 40 }} />
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -449,9 +452,13 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bg,
     overflow: 'hidden',
   },
+  header: {
+    paddingHorizontal: 24,
+  },
   scroll: {
     paddingHorizontal: 24,
-    paddingTop: 64,
+    paddingTop: 24,
+    flexGrow: 1,
   },
   glowTop: {
     position: 'absolute',

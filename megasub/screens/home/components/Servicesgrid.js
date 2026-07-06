@@ -4,18 +4,16 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
+  Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-
-const { width } = Dimensions.get('window');
+import { useTheme } from '../../../contexts/ThemeContext';
 
 const PADDING = 20;
 const CARD_PADDING = 14;
 const GAP = 6;
 const COLUMNS = 4;
-const ICON_SIZE = 52;
-const ITEM_SIZE = (width - PADDING * 2 - CARD_PADDING * 2 - GAP * (COLUMNS - 1)) / COLUMNS;
 
 const FONTS = {
   semibold: 'Manrope_600SemiBold',
@@ -24,44 +22,73 @@ const FONTS = {
 
 const SERVICES = [
   { id: 'airtime',      label: 'Airtime',      icon: 'call-outline',            color: '#4A55DD', bg: 'rgba(74,85,221,0.1)' },
-  { id: 'data',         label: 'Data',     icon: 'wifi-outline',            color: '#00C9A7', bg: 'rgba(0,201,167,0.1)' },
-  { id: 'electricity',  label: 'Electricity',            icon: 'flash-outline',           color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
-  { id: 'cable',        label: 'Cable TV',               icon: 'tv-outline',              color: '#EC4899', bg: 'rgba(236,72,153,0.1)' },
-  { id: 'bulk-sms',     label: 'Bulk\nRecharge',         icon: 'phone-portrait-outline',  color: '#7C3AED', bg: 'rgba(124,58,237,0.1)' },
-  { id: 'bulk-data',    label: 'Bulk Data',              icon: 'globe-outline',           color: '#06B6D4', bg: 'rgba(6,182,212,0.1)' },
-  { id: 'waec',         label: 'WAEC /\nNECO',           icon: 'school-outline',          color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
-  { id: 'virtual-card', label: 'Virtual\nCard',          icon: 'card-outline',            color: '#EF4444', bg: 'rgba(239,68,68,0.1)' },
+  { id: 'data',         label: 'Data',         icon: 'wifi-outline',            color: '#00C9A7', bg: 'rgba(0,201,167,0.1)' },
+  { id: 'electricity',  label: 'Electricity',  icon: 'flash-outline',           color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
+  { id: 'cable',        label: 'Cable TV',     icon: 'tv-outline',              color: '#EC4899', bg: 'rgba(236,72,153,0.1)' },
+  { id: 'bulk-sms',     label: 'Bulk\nRecharge', icon: 'phone-portrait-outline', color: '#7C3AED', bg: 'rgba(124,58,237,0.1)' },
+  { id: 'bulk-data',    label: 'Bulk Data',    icon: 'globe-outline',           color: '#06B6D4', bg: 'rgba(6,182,212,0.1)' },
+  { id: 'waec',         label: 'WAEC /\nNECO', icon: 'school-outline',          color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
+  { id: 'virtual-card', label: 'Virtual\nCard', icon: 'card-outline',           color: '#EF4444', bg: 'rgba(239,68,68,0.1)' },
 ];
 
-function ServiceItem({ service, onPress }) {
+// Maps a service id to the screen name used in App.js's `screen` state.
+// Services without an entry here don't have a screen built yet, so tapping
+// them is a no-op until one is added.
+const SERVICE_SCREENS = {
+  airtime: 'airtime',
+  data: 'data',
+  cable: 'cable',
+  electricity: 'electricity',
+  'bulk-sms': 'bulk',
+  waec: 'waec',
+};
+
+function ServiceItem({ service, onPress, itemSize, iconSize, textColor }) {
   return (
     <TouchableOpacity
-      style={styles.item}
+      style={[styles.item, { width: itemSize }]}
       onPress={() => onPress && onPress(service)}
       activeOpacity={0.75}
     >
-      <View style={[styles.iconWrap, { backgroundColor: service.bg }]}>
-        <Ionicons name={service.icon} size={26} color={service.color} />
+      <View style={[styles.iconWrap, { width: iconSize, height: iconSize, borderRadius: iconSize / 2, backgroundColor: service.bg }]}>
+        <Ionicons name={service.icon} size={iconSize * 0.5} color={service.color} />
       </View>
-      <Text style={styles.label}>{service.label}</Text>
+      <Text style={[styles.label, { color: textColor }]}>{service.label}</Text>
     </TouchableOpacity>
   );
 }
 
-export default function ServicesGrid({ onServicePress }) {
+export default function ServicesGrid({ navigate, onServicePress }) {
+  const { colors } = useTheme();
+  const { width } = useWindowDimensions();
+  const isCompact = width < 360;
+  const iconSize = isCompact ? 44 : 52;
+  const itemSize = (width - PADDING * 2 - CARD_PADDING * 2 - GAP * (COLUMNS - 1)) / COLUMNS;
+
+  const handlePress = (service) => {
+    if (onServicePress) {
+      onServicePress(service);
+      return;
+    }
+    const target = SERVICE_SCREENS[service.id];
+    if (target && navigate) {
+      navigate(target);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
-        <Text style={styles.sectionTitle}>Services</Text>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Services</Text>
         <TouchableOpacity>
           <Text style={styles.seeAll}>See all</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.card}>
+      <View style={[styles.card, { backgroundColor: colors.cardAlt }, Platform.OS === 'android' && { backgroundColor: colors.card }]}>
         <View style={styles.grid}>
           {SERVICES.map((s) => (
-            <ServiceItem key={s.id} service={s} onPress={onServicePress} />
+            <ServiceItem key={s.id} service={s} onPress={handlePress} itemSize={itemSize} iconSize={iconSize} textColor={colors.text} />
           ))}
         </View>
       </View>
@@ -91,15 +118,8 @@ const styles = StyleSheet.create({
     color: '#4A55DD',
   },
   card: {
-    backgroundColor: 'rgba(74,85,221,0.06)',
     borderRadius: 20,
     padding: CARD_PADDING,
-    // subtle glow
-    shadowColor: '#4A55DD',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 3,
   },
   grid: {
     flexDirection: 'row',
@@ -109,13 +129,9 @@ const styles = StyleSheet.create({
     columnGap: GAP,
   },
   item: {
-    width: ITEM_SIZE,
     alignItems: 'center',
   },
   iconWrap: {
-    width: ICON_SIZE,
-    height: ICON_SIZE,
-    borderRadius: ICON_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 6,

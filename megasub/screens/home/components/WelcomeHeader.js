@@ -9,6 +9,8 @@ import {
   Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../../contexts/ThemeContext';
 
 const FONTS = {
   regular: 'Manrope_400Regular',
@@ -56,12 +58,9 @@ const DEMO_NOTIFICATIONS = [
   },
 ];
 
-export default function WelcomeHeader({ 
-  userName, 
-  userData, 
-  onNotifPress, 
-  notifCount = 3 
-}) {
+export default function WelcomeHeader({ userName, userData, onNotifPress, notifCount = 0 }) {
+  const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
   const [visible, setVisible] = useState(false);
 
   const handleOpen = () => {
@@ -69,10 +68,8 @@ export default function WelcomeHeader({
     onNotifPress && onNotifPress();
   };
 
-  // Get the user's first name from userData or use the userName prop
   const displayName = userData?.first_name || userName || userData?.username || 'there';
-  
-  // Get greeting based on time of day
+
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Good morning';
@@ -80,43 +77,39 @@ export default function WelcomeHeader({
     return 'Good evening';
   };
 
-  // Get user's initials for avatar
   const getInitials = () => {
-    if (userData?.first_name && userData?.last_name) {
+    if (userData?.first_name && userData?.last_name)
       return `${userData.first_name.charAt(0)}${userData.last_name.charAt(0)}`;
-    }
-    if (userData?.first_name) {
-      return userData.first_name.charAt(0);
-    }
-    if (userName) {
-      return userName.charAt(0);
-    }
+    if (userData?.first_name) return userData.first_name.charAt(0);
+    if (userName) return userName.charAt(0);
     return 'U';
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.left}>
-        <View style={styles.greetingRow}>
-          <Text style={styles.greeting}>{getGreeting()} 👋</Text>
-          {userData && (
-            <View style={styles.userInitials}>
-              <Text style={styles.initialsText}>{getInitials()}</Text>
+    <>
+      <View style={[styles.container, { paddingTop: insets.top + 16, backgroundColor: colors.card, borderBottomColor: colors.divider }]}>
+        <View style={styles.left}>
+          <View style={styles.greetingRow}>
+            <Text style={[styles.greeting, { color: colors.textMuted }]}>{getGreeting()} 👋</Text>
+            {userData && (
+              <View style={styles.userInitials}>
+                <Text style={styles.initialsText}>{getInitials()}</Text>
+              </View>
+            )}
+          </View>
+          <Text style={[styles.name, { color: colors.text }]}>{displayName}</Text>
+          <Text style={[styles.sub, { color: colors.textMuted }]}>How can we help you today?</Text>
+        </View>
+
+        <TouchableOpacity style={styles.notifBtn} onPress={handleOpen} activeOpacity={0.8}>
+          <Ionicons name="notifications-outline" size={22} color="#4A55DD" />
+          {notifCount > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{notifCount > 9 ? '9+' : notifCount}</Text>
             </View>
           )}
-        </View>
-        <Text style={styles.name}>{displayName}</Text>
-        <Text style={styles.sub}>How can we help you today?</Text>
+        </TouchableOpacity>
       </View>
-
-      <TouchableOpacity style={styles.notifBtn} onPress={handleOpen} activeOpacity={0.8}>
-        <Ionicons name="notifications-outline" size={22} color="#4A55DD" />
-        {notifCount > 0 && (
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{notifCount > 9 ? '9+' : notifCount}</Text>
-          </View>
-        )}
-      </TouchableOpacity>
 
       <Modal
         visible={visible}
@@ -126,17 +119,14 @@ export default function WelcomeHeader({
       >
         <View style={styles.overlay}>
           <Pressable style={styles.overlayTouch} onPress={() => setVisible(false)} />
-
-          <View style={styles.sheet}>
+          <View style={[styles.sheet, { backgroundColor: colors.card }]}>
             <View style={styles.sheetHandle} />
-
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Notifications</Text>
+              <Text style={[styles.sheetTitle, { color: colors.text }]}>Notifications</Text>
               <TouchableOpacity onPress={() => setVisible(false)}>
                 <Text style={styles.seeAll}>See all</Text>
               </TouchableOpacity>
             </View>
-
             <ScrollView
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.list}
@@ -148,10 +138,10 @@ export default function WelcomeHeader({
                   </View>
                   <View style={styles.notifContent}>
                     <View style={styles.notifTopRow}>
-                      <Text style={styles.notifTitle}>{n.title}</Text>
-                      <Text style={styles.notifTime}>{n.time}</Text>
+                      <Text style={[styles.notifTitle, { color: colors.text }]}>{n.title}</Text>
+                      <Text style={[styles.notifTime, { color: colors.textFaint }]}>{n.time}</Text>
                     </View>
-                    <Text style={styles.notifMessage}>{n.message}</Text>
+                    <Text style={[styles.notifMessage, { color: colors.textMuted }]}>{n.message}</Text>
                   </View>
                 </View>
               ))}
@@ -159,7 +149,7 @@ export default function WelcomeHeader({
           </View>
         </View>
       </Modal>
-    </View>
+    </>
   );
 }
 
@@ -169,9 +159,10 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 8,
+    paddingBottom: 16,
     backgroundColor: '#FFFFFF',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(11,13,26,0.08)',
   },
   left: { flex: 1 },
   greetingRow: {
@@ -228,13 +219,8 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.semibold,
     fontSize: 9, color: '#FFFFFF', lineHeight: 12,
   },
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(11,13,26,0.4)',
-  },
-  overlayTouch: {
-    flex: 1,
-  },
+  overlay: { flex: 1, backgroundColor: 'rgba(11,13,26,0.4)' },
+  overlayTouch: { flex: 1 },
   sheet: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 28,
@@ -245,12 +231,9 @@ const styles = StyleSheet.create({
     minHeight: '50%',
   },
   sheetHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
+    width: 40, height: 4, borderRadius: 2,
     backgroundColor: 'rgba(11,13,26,0.12)',
-    alignSelf: 'center',
-    marginBottom: 14,
+    alignSelf: 'center', marginBottom: 14,
   },
   sheetHeader: {
     flexDirection: 'row',
@@ -269,24 +252,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#4A55DD',
   },
-  list: {
-    paddingBottom: 30,
-    gap: 14,
-  },
-  notifItem: {
-    flexDirection: 'row',
-    gap: 12,
-  },
+  list: { paddingBottom: 30, gap: 14 },
+  notifItem: { flexDirection: 'row', gap: 12 },
   notifIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 38, height: 38, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
   },
-  notifContent: {
-    flex: 1,
-  },
+  notifContent: { flex: 1 },
   notifTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -294,20 +266,15 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   notifTitle: {
-    fontFamily: FONTS.bold,
-    fontWeight: '700',
-    fontSize: 13.5,
-    color: '#0B0D1A',
+    fontFamily: FONTS.bold, fontWeight: '700',
+    fontSize: 13.5, color: '#0B0D1A',
   },
   notifTime: {
     fontFamily: FONTS.regular,
-    fontSize: 11,
-    color: 'rgba(11,13,26,0.4)',
+    fontSize: 11, color: 'rgba(11,13,26,0.4)',
   },
   notifMessage: {
     fontFamily: FONTS.regular,
-    fontSize: 12.5,
-    color: 'rgba(11,13,26,0.55)',
-    lineHeight: 18,
+    fontSize: 12.5, color: 'rgba(11,13,26,0.55)', lineHeight: 18,
   },
 });

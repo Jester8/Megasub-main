@@ -4,9 +4,10 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Platform,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../../contexts/ThemeContext';
 
 const FONTS = {
   medium: 'Manrope_500Medium',
@@ -21,8 +22,10 @@ const TABS = [
 ];
 
 export default function BottomNav({ activeTab, onTabPress }) {
+  const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
   return (
-    <View style={styles.wrapper}>
+    <View style={[styles.wrapper, { paddingBottom: insets.bottom + 14, backgroundColor: colors.card, borderTopColor: colors.divider }]}>
       <View style={styles.container}>
         {TABS.map((tab) => {
           const isActive = activeTab === tab.id;
@@ -33,15 +36,16 @@ export default function BottomNav({ activeTab, onTabPress }) {
               onPress={() => onTabPress && onTabPress(tab.id)}
               activeOpacity={0.75}
             >
-              <View style={[styles.iconArea, isActive && styles.iconAreaActive]}>
+              <View style={styles.iconArea}>
                 <Feather
                   name={tab.icon}
                   size={22}
-                  color={isActive ? '#4A55DD' : 'rgba(11,13,26,0.4)'}
+                  color={isActive ? colors.brand : colors.textFaint}
+                  fill={isActive ? colors.brand : 'none'}
                   strokeWidth={isActive ? 2.4 : 2}
                 />
               </View>
-              <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
+              <Text style={[styles.tabLabel, { color: isActive ? colors.brand : colors.textFaint }, isActive && styles.tabLabelActive]}>
                 {tab.label}
               </Text>
             </TouchableOpacity>
@@ -54,24 +58,15 @@ export default function BottomNav({ activeTab, onTabPress }) {
 
 const styles = StyleSheet.create({
   wrapper: {
-    position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 30 : 20,
-    left: 16,
-    right: 16,
-    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(11,13,26,0.08)',
   },
   container: {
     flexDirection: 'row',
     width: '100%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 28,
-    paddingVertical: 12,
+    paddingVertical: 10,
     paddingHorizontal: 10,
-    elevation: 14,
-    shadowColor: '#0B0D1A',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
   },
   tab: {
     flex: 1,
@@ -84,9 +79,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  iconAreaActive: {
-    backgroundColor: 'rgba(74,85,221,0.12)',
   },
   tabLabel: {
     fontFamily: FONTS.medium,
