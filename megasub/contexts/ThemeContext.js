@@ -19,8 +19,11 @@ export const LIGHT_COLORS = {
 
 export const DARK_COLORS = {
   mode: 'dark',
-  background: '#0B0D1A',
-  card: '#161826',
+  background: '#000000',
+  card: '#000000',
+  // Must stay distinguishable from `card`/`background` — this is used as the
+  // "highlighted surface" (active plan/option cards, PIN boxes, alt cards),
+  // and was previously '#000000' too, making all of those invisible.
   cardAlt: 'rgba(108,118,245,0.14)',
   border: '#262943',
   text: '#F5F6FA',

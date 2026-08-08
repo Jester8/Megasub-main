@@ -4,12 +4,10 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-
-const { width } = Dimensions.get('window');
+import { useResponsive } from '../../../lib/responsive';
 
 const FONTS = {
   regular: 'Manrope_400Regular',
@@ -22,6 +20,7 @@ const FONTS = {
 // Expects userData object containing your dashboard payload fields (passed down from navigation/parent context)
 export default function WalletCard({ userData, onTopUp }) {
   const [hidden, setHidden] = useState(false);
+  const { isTablet } = useResponsive();
 
   // Safely extract main_wallet balance string and convert it to float (handles "0" string types from API payload)
   const walletBalance = userData?.main_wallet ? parseFloat(userData.main_wallet) : 0.00;
@@ -37,7 +36,7 @@ export default function WalletCard({ userData, onTopUp }) {
         colors={['#2A35C4', '#4A55DD', '#1E2A9E']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={styles.card}
+        style={[styles.card, isTablet && styles.cardTablet]}
       >
         {/* Visual background element shapes */}
         <View style={styles.circle1} />
@@ -48,30 +47,30 @@ export default function WalletCard({ userData, onTopUp }) {
           <View>
             <Text style={styles.cardLabel}>Wallet Balance</Text>
             <View style={styles.balanceRow}>
-              <Text style={styles.balanceText}>
+              <Text style={[styles.balanceText, isTablet && styles.balanceTextTablet]}>
                 {hidden ? '₦ ••••••' : formatted}
               </Text>
               <TouchableOpacity onPress={() => setHidden(!hidden)} style={styles.eyeBtn}>
                 <Ionicons
                   name={hidden ? 'eye-off-outline' : 'eye-outline'}
-                  size={18}
+                  size={isTablet ? 16 : 18}
                   color="rgba(255,255,255,0.7)"
                 />
               </TouchableOpacity>
             </View>
           </View>
-          <View style={styles.logoMark}>
-            <Text style={styles.logoMarkText}>M</Text>
+          <View style={[styles.logoMark, isTablet && styles.logoMarkTablet]}>
+            <Text style={[styles.logoMarkText, isTablet && styles.logoMarkTextTablet]}>M</Text>
           </View>
         </View>
 
-        <View style={styles.bottomRow}>
+        <View style={[styles.bottomRow, isTablet && styles.bottomRowTablet]}>
           <View>
             <Text style={styles.acctLabel}>Username</Text>
             <Text style={styles.acctValue}>{userAccountIdentifier}</Text>
           </View>
           <TouchableOpacity style={styles.topUpBtn} onPress={onTopUp} activeOpacity={0.85}>
-            <Ionicons name="add" size={16} color="#4A55DD" />
+            <Ionicons name="add" size={isTablet ? 15 : 16} color="#4A55DD" />
             <Text style={styles.topUpText}>Top Up</Text>
           </TouchableOpacity>
         </View>
@@ -82,8 +81,8 @@ export default function WalletCard({ userData, onTopUp }) {
 
 const styles = StyleSheet.create({
   wrapper: {
-    paddingHorizontal: 20,
-    marginTop: 20,
+    paddingHorizontal: 16,
+    marginTop: 14,
   },
   card: {
     borderRadius: 20,
@@ -96,6 +95,12 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.35,
     shadowRadius: 20,
+  },
+  // Slides.js pins its image height to this card's minHeight so the two read
+  // as one size — keep the tablet values in step there too.
+  cardTablet: {
+    padding: 18,
+    minHeight: 140,
   },
   circle1: {
     position: 'absolute', width: 160, height: 160, borderRadius: 80,
@@ -132,6 +137,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     letterSpacing: -0.5,
   },
+  balanceTextTablet: { fontSize: 23 },
   eyeBtn: { padding: 4 },
   logoMark: {
     width: 40, height: 40, borderRadius: 20,
@@ -139,16 +145,19 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
   },
+  logoMarkTablet: { width: 34, height: 34, borderRadius: 17 },
   logoMarkText: {
     fontFamily: FONTS.extrabold,
     fontSize: 18, color: '#FFFFFF',
   },
+  logoMarkTextTablet: { fontSize: 16 },
   bottomRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
     marginTop: 24,
   },
+  bottomRowTablet: { marginTop: 18 },
   acctLabel: {
     fontFamily: FONTS.regular,
     fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 3,

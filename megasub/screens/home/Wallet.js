@@ -1,17 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
+  Image,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
   StatusBar,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomNav from './components/BottomNav';
+import ReceiptModal from './components/ReceiptModal';
 import { useTheme } from '../../contexts/ThemeContext';
+import { fetchTransactions } from '../../lib/api';
+import { detectTransactionLogo } from '../../lib/logos';
+import { CATEGORY_STYLE, DEFAULT_STYLE, STATUS_LABELS, formatDateShort, toDateParam } from '../../lib/transactionMeta';
 
 const FONTS = {
   regular: 'Manrope_400Regular',
@@ -22,65 +29,32 @@ const FONTS = {
 };
 
 const BRAND = '#4A55DD';
+const VISIBLE_COUNT = 8;
+const WINDOW_DAYS = 30;
 
-const WALLET_ACTIVITY = [
-  {
-    id: '1',
-    title: 'Wallet Funding',
-    subtitle: 'Bank Transfer • Today, 9:02 AM',
-    amount: '+₦15,000',
-    type: 'credit',
-    icon: 'arrow-down-circle',
-    color: '#10B981',
-    bg: 'rgba(16,185,129,0.1)',
-  },
-  {
-    id: '2',
-    title: 'Airtime Recharge',
-    subtitle: 'MTN • Today, 10:24 AM',
-    amount: '-₦1,000',
-    type: 'debit',
-    icon: 'call',
-    color: '#4A55DD',
-    bg: 'rgba(74,85,221,0.1)',
-  },
-  {
-    id: '3',
-    title: 'Cable Subscription',
-    subtitle: 'DStv Compact • Yesterday',
-    amount: '-₦19,000',
-    type: 'debit',
-    icon: 'tv',
-    color: '#EC4899',
-    bg: 'rgba(236,72,153,0.1)',
-  },
-  {
-    id: '4',
-    title: 'Wallet Funding',
-    subtitle: 'Bank Transfer • 2 days ago',
-    amount: '+₦5,000',
-    type: 'credit',
-    icon: 'arrow-down-circle',
-    color: '#10B981',
-    bg: 'rgba(16,185,129,0.1)',
-  },
-];
-
-function ActivityItem({ item, colors }) {
-  const isCredit = item.type === 'credit';
+function ActivityItem({ tx, colors, onPress }) {
+  const visual = CATEGORY_STYLE[tx.transaction_category] || DEFAULT_STYLE;
+  const statusLabel = STATUS_LABELS[tx.status] || 'Unknown';
+  const amount = Number(tx.amount || tx.discounted_amount || 0);
+  const logo = detectTransactionLogo(tx);
   return (
-    <View style={styles.txItem}>
-      <View style={[styles.txIconWrap, { backgroundColor: item.bg }]}>
-        <Ionicons name={item.icon} size={20} color={item.color} />
+    <TouchableOpacity style={styles.txItem} activeOpacity={0.75} onPress={onPress}>
+      <View style={[styles.txIconWrap, { backgroundColor: visual.bg }]}>
+        {logo ? (
+          <Image source={logo} style={styles.txLogo} />
+        ) : (
+          <Ionicons name={visual.icon} size={20} color={visual.color} />
+        )}
       </View>
       <View style={styles.txInfo}>
-        <Text style={[styles.txTitle, { color: colors.text }]}>{item.title}</Text>
-        <Text style={[styles.txSubtitle, { color: colors.textMuted }]}>{item.subtitle}</Text>
+        <Text style={[styles.txTitle, { color: colors.text }]} numberOfLines={1}>{tx.description || 'Transaction'}</Text>
+        <Text style={[styles.txSubtitle, { color: colors.textMuted }]}>{formatDateShort(tx.created_at)}</Text>
       </View>
-      <Text style={[styles.txAmount, isCredit ? styles.txAmountCredit : { color: colors.text }]}>
-        {item.amount}
-      </Text>
-    </View>
+      <View style={styles.txRight}>
+        <Text style={[styles.txAmount, { color: colors.text }]}>₦{amount.toLocaleString()}</Text>
+        <Text style={[styles.txStatus, { color: colors.textFaint }]}>{statusLabel}</Text>
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -88,9 +62,50 @@ export default function Wallet({ navigate, user }) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const [hidden, setHidden] = useState(false);
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selectedTx, setSelectedTx] = useState(null);
 
   const walletBalance = user?.main_wallet ? parseFloat(user.main_wallet) : 0.0;
   const formatted = '₦' + walletBalance.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const dateTo = new Date();
+        const dateFrom = new Date();
+        dateFrom.setDate(dateFrom.getDate() - WINDOW_DAYS);
+
+        const json = await fetchTransactions({
+          userId: user?.id,
+          dateFrom: toDateParam(dateFrom),
+          dateTo: toDateParam(dateTo),
+        });
+
+        if (cancelled) return;
+        const list = [...(json.data || [])]
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .slice(0, VISIBLE_COUNT);
+        setTransactions(list);
+      } catch (err) {
+        if (!cancelled) setError(err.message || 'Could not load your recent activity.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    if (user?.id) load();
+    else setLoading(false);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
@@ -133,6 +148,9 @@ export default function Wallet({ navigate, user }) {
             <TouchableOpacity
               style={[styles.actionBtn, styles.actionBtnOutline]}
               activeOpacity={0.85}
+              onPress={() =>
+                Alert.alert('Coming Soon', 'Withdrawals aren\'t available yet — check back soon.')
+              }
             >
               <Feather name="arrow-up-right" size={16} color="#FFFFFF" />
               <Text style={[styles.actionBtnText, styles.actionBtnTextOutline]}>Withdraw</Text>
@@ -148,12 +166,29 @@ export default function Wallet({ navigate, user }) {
         </View>
 
         <View style={[styles.listCard, { backgroundColor: colors.card }]}>
-          {WALLET_ACTIVITY.map((item, index) => (
-            <View key={item.id}>
-              <ActivityItem item={item} colors={colors} />
-              {index < WALLET_ACTIVITY.length - 1 && <View style={[styles.divider, { backgroundColor: colors.divider }]} />}
+          {loading ? (
+            <ActivityIndicator color={BRAND} style={styles.loader} />
+          ) : error ? (
+            <View style={styles.emptyState}>
+              <Feather name="wifi-off" size={28} color="#B7BCEF" />
+              <Text style={[styles.emptyText, { color: colors.textMuted }]}>{error}</Text>
             </View>
-          ))}
+          ) : transactions.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Feather name="inbox" size={28} color="#B7BCEF" />
+              <Text style={[styles.emptyText, { color: colors.textMuted }]}>No recent activity</Text>
+              <Text style={[styles.emptySubtext, { color: colors.textFaint }]}>
+                Your top-ups and purchases will show up here.
+              </Text>
+            </View>
+          ) : (
+            transactions.map((tx, index) => (
+              <View key={tx.id}>
+                <ActivityItem tx={tx} colors={colors} onPress={() => setSelectedTx(tx)} />
+                {index < transactions.length - 1 && <View style={[styles.divider, { backgroundColor: colors.divider }]} />}
+              </View>
+            ))
+          )}
         </View>
       </ScrollView>
 
@@ -163,6 +198,13 @@ export default function Wallet({ navigate, user }) {
           if (tab === 'wallet') return;
           navigate && navigate(tab);
         }}
+      />
+
+      <ReceiptModal
+        visible={!!selectedTx}
+        transaction={selectedTx}
+        onClose={() => setSelectedTx(null)}
+        colors={colors}
       />
     </View>
   );
@@ -226,14 +268,20 @@ const styles = StyleSheet.create({
   sectionTitle: { fontFamily: FONTS.bold, fontSize: 15, color: '#0B0D1A' },
   seeAll: { fontFamily: FONTS.semibold, fontSize: 13, color: BRAND },
 
-  listCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 16 },
+  listCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 16, minHeight: 84 },
+  loader: { paddingVertical: 20 },
+  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 20, gap: 4 },
+  emptyText: { fontFamily: FONTS.semibold, fontSize: 13, marginTop: 8 },
+  emptySubtext: { fontFamily: FONTS.regular, fontSize: 11.5, textAlign: 'center', paddingHorizontal: 20 },
+
   txItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
-  txIconWrap: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  txInfo: { flex: 1 },
+  txIconWrap: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginRight: 12, overflow: 'hidden' },
+  txLogo: { width: 44, height: 44, borderRadius: 22 },
+  txInfo: { flex: 1, paddingRight: 8 },
   txTitle: { fontFamily: FONTS.bold, fontSize: 13.5, color: '#0B0D1A', marginBottom: 2 },
   txSubtitle: { fontFamily: FONTS.regular, fontSize: 11.5, color: 'rgba(11,13,26,0.45)' },
+  txRight: { alignItems: 'flex-end' },
   txAmount: { fontFamily: FONTS.bold, fontSize: 13.5 },
-  txAmountCredit: { color: '#10B981' },
-  txAmountDebit: { color: '#0B0D1A' },
+  txStatus: { fontFamily: FONTS.regular, fontSize: 10.5, marginTop: 2 },
   divider: { height: 1, backgroundColor: 'rgba(11,13,26,0.06)', marginVertical: 2 },
 });

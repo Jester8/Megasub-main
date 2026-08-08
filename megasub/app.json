@@ -7,14 +7,13 @@
     "icon": "./assets/megasubmain.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/megasubmain.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.megasub"
+      "bundleIdentifier": "com.anonymous.megasub",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Megasub uses Face ID to let you log in and unlock the app quickly and securely.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -23,18 +22,49 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.megasub"
+      "package": "com.anonymous.megasub",
+      "permissions": [
+        "android.permission.READ_CONTACTS",
+        "android.permission.WRITE_CONTACTS"
+      ]
     },
     "web": {
       "favicon": "./assets/megasubmain.png"
     },
     "plugins": [
       "expo-font",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/megasubmain.png",
+          "imageWidth": 160,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff",
+          "ios": {
+            "image": "./assets/megasubmain.png",
+            "imageWidth": 140
+          }
+        }
+      ],
+      "@react-native-community/datetimepicker",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Allow Megasub to access your contacts so you can pick who to send airtime or data to."
+        }
+      ],
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.610379032738-qgicd1bril1d6n43v78ldqmh8bfdacaq"
+        }
+      ]
     ],
+    "owner": "kalex235",
     "extra": {
       "eas": {
-        "projectId": "7026c1b3-04f0-4a10-b514-b83a233d8847"
+        "projectId": "fc4f4a94-3f72-4021-affe-9420f8230609"
       }
     }
   }

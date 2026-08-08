@@ -8,9 +8,11 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  StatusBar,
 } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const FONTS = {
   regular: 'Manrope_400Regular',
@@ -29,6 +31,7 @@ const ID_TYPES = [
 
 export default function Verification({ navigate, user }) {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
 
   const status = user?.kyc_status || 'pending';
   const [idType, setIdType] = useState(ID_TYPES[0]);
@@ -71,16 +74,17 @@ export default function Verification({ navigate, user }) {
   const isVerified = status === 'verified';
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={colors.statusBarStyle} translucent backgroundColor="transparent" />
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity
-          style={styles.backBtn}
+          style={[styles.backBtn, { backgroundColor: colors.card }]}
           onPress={() => navigate && navigate('profile')}
           activeOpacity={0.7}
         >
-          <Feather name="arrow-left" size={20} color="#0B0D1A" />
+          <Feather name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>KYC Verification</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>KYC Verification</Text>
         <View style={{ width: 38 }} />
       </View>
 
@@ -94,8 +98,8 @@ export default function Verification({ navigate, user }) {
             />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.statusTitle}>{isVerified ? 'Verified' : 'Not Verified'}</Text>
-            <Text style={styles.statusSub}>
+            <Text style={[styles.statusTitle, { color: colors.text }]}>{isVerified ? 'Verified' : 'Not Verified'}</Text>
+            <Text style={[styles.statusSub, { color: colors.textMuted }]}>
               {isVerified
                 ? 'Your identity has been verified successfully.'
                 : 'Submit your BVN or NIN to verify your identity and unlock higher transaction limits.'}
@@ -105,29 +109,33 @@ export default function Verification({ navigate, user }) {
 
         {!isVerified && (
           <>
-            <Text style={styles.sectionLabel}>ID Type</Text>
+            <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>ID Type</Text>
             <View style={styles.typeRow}>
               {ID_TYPES.map((t) => {
                 const active = idType.id === t.id;
                 return (
                   <TouchableOpacity
                     key={t.id}
-                    style={[styles.typeCard, active && styles.typeCardActive]}
+                    style={[
+                      styles.typeCard,
+                      { backgroundColor: colors.card, borderColor: colors.border },
+                      active && styles.typeCardActive,
+                    ]}
                     onPress={() => setIdType(t)}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.typeLabel, active && styles.typeLabelActive]}>{t.label}</Text>
+                    <Text style={[styles.typeLabel, { color: colors.text }, active && styles.typeLabelActive]}>{t.label}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
 
-            <Text style={styles.sectionLabel}>{idType.label} Number</Text>
-            <View style={styles.inputCard}>
+            <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>{idType.label} Number</Text>
+            <View style={[styles.inputCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { color: colors.text }]}
                 placeholder={`Enter your ${idType.label}`}
-                placeholderTextColor="#9CA0B8"
+                placeholderTextColor={colors.textFaint}
                 keyboardType="number-pad"
                 maxLength={11}
                 value={idNumber}
@@ -139,7 +147,7 @@ export default function Verification({ navigate, user }) {
       </ScrollView>
 
       {!isVerified && (
-        <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 12, backgroundColor: colors.background }]}>
           <TouchableOpacity
             style={[styles.continueBtn, (idNumber.trim().length < 10 || loading) && styles.continueBtnDisabled]}
             activeOpacity={0.85}

@@ -2,16 +2,27 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
+  Image,
   TextInput,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
   Alert,
+  StatusBar,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchNetworks, fetchProductPlanCategories, fetchProductPlans, buyData } from '../../../lib/api';
+import { useTheme } from '../../../contexts/ThemeContext';
+import CategoryTabs from '../components/CategoryTabs';
+import PlanGrid from '../components/PlanGrid';
+import SuccessView from '../components/SuccessView';
+import ContactPicker from '../components/ContactPicker';
+import WrongPinModal from '../components/WrongPinModal';
+import { detectNetworkFromPhone, findNetworkByLabel } from '../../../lib/networkDetect';
+import { formatNaira, alertForPurchaseError, stripNetworkPrefix } from '../../../lib/format';
+import CouponCheck from '../components/CouponCheck';
 
 const FONTS = {
   regular: 'Manrope_400Regular',
@@ -30,7 +41,16 @@ const NETWORK_COLORS = {
   GLO: '#3FA535',
 };
 
-function CustomPinInput({ onPinComplete }) {
+// Real provider logos (assets/networks); the colored dot remains the
+// fallback for any network name the API returns that isn't mapped here.
+const NETWORK_LOGOS = {
+  MTN: require('../../../assets/networks/mtn.png'),
+  AIRTEL: require('../../../assets/networks/airtel.png'),
+  GLO: require('../../../assets/networks/glo.png'),
+  '9MOBILE': require('../../../assets/networks/9mobile.png'),
+};
+
+function CustomPinInput({ onPinComplete, colors }) {
   const [code, setCode] = useState(['', '', '', '']);
   const inputs = useRef([]);
 
@@ -44,6 +64,11 @@ function CustomPinInput({ onPinComplete }) {
 
     if (cleanText && index < 3) {
       inputs.current[index + 1].focus();
+    } else if (!cleanText && index > 0) {
+      // Deleting used to just clear the box and leave focus there, so the
+      // very next backspace press had nothing to do — advancing back to the
+      // previous box here means backspacing flows continuously across boxes.
+      inputs.current[index - 1].focus();
     }
   };
 
@@ -59,7 +84,11 @@ function CustomPinInput({ onPinComplete }) {
         <TextInput
           key={index}
           ref={(ref) => (inputs.current[index] = ref)}
-          style={[styles.otpInputBox, digit ? styles.otpInputFilled : null]}
+          style={[
+            styles.otpInputBox,
+            { color: colors?.text, backgroundColor: colors?.card, borderColor: colors?.border },
+            digit ? styles.otpInputFilled : null,
+          ]}
           keyboardType="number-pad"
           maxLength={1}
           secureTextEntry={true}
@@ -73,8 +102,25 @@ function CustomPinInput({ onPinComplete }) {
   );
 }
 
+// Nigerian mobile numbers: 11 digits, leading zero. Recharging with anything
+// shorter/garbled used to still go through — the backend's network-match
+// check was disabled for this call (validatephonenetwork: 0) before the
+// correct field usage was known, leaving the client as the only thing
+// standing between a malformed number and a charged wallet. The updated API
+// spec documents validatephonenetwork: 1 as the real, intended value — now
+// set below — so this is server-enforced too, not just client-side.
+// The field shows a +234 chip, so its own placeholder ("803 123 4567")
+// expects the 10-digit local number without the leading zero — but the
+// buy call's cleanedPhone/formattedPhone step also accepts the 11-digit
+// leading-zero form and normalizes it, so both must validate here too.
+const isValidPhone = (p) => {
+  const cleaned = String(p || '').trim();
+  return /^0\d{10}$/.test(cleaned) || /^\d{10}$/.test(cleaned);
+};
+
 export default function Data({ navigate, user }) {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
   const [step, setStep] = useState('input');
 
   const [networks, setNetworks] = useState([]);
@@ -88,8 +134,11 @@ export default function Data({ navigate, user }) {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [phone, setPhone] = useState('');
+  const [contactPickerVisible, setContactPickerVisible] = useState(false);
 
   const [pin, setPin] = useState('');
+  const [pinKey, setPinKey] = useState(0);
+  const [wrongPinVisible, setWrongPinVisible] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -144,8 +193,20 @@ export default function Data({ navigate, user }) {
     }
   };
 
+  // Auto-selects the network that actually matches the number instead of
+  // leaving whatever was picked before — e.g. typing/picking an MTN number
+  // used to leave Glo selected if Glo happened to be first in the list.
+  const handlePhoneChange = (value) => {
+    setPhone(value);
+    const label = detectNetworkFromPhone(value);
+    const match = findNetworkByLabel(networks, label);
+    if (match && match.id !== selectedNetwork?.id) {
+      setSelectedNetwork(match);
+    }
+  };
+
   const handleFormSubmit = () => {
-    if (!selectedNetwork || !phone || !selectedCategory || !selectedPlan) return;
+    if (!selectedNetwork || !isValidPhone(phone) || !selectedCategory || !selectedPlan) return;
     setStep('confirm');
   };
 
@@ -165,38 +226,63 @@ export default function Data({ navigate, user }) {
         product_plan_id: selectedPlan.product_plan_id,
         pin,
         wallet_category: 'main_wallet',
-        validatephonenetwork: 0,
+        validatephonenetwork: 1,
       };
 
       await buyData(payload);
-      Alert.alert('Success 🎉', 'Data subscription processing complete.');
-      navigate && navigate('home');
+      setStep('success');
     } catch (error) {
-      Alert.alert('Transaction Failed', error.message || 'Please check your information and PIN.');
+      const alert = alertForPurchaseError(error);
+      if (alert.isWrongPin) {
+        setWrongPinVisible(true);
+      } else if (alert.requiresPhoneVerification) {
+        Alert.alert(alert.title, alert.message, [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Verify Phone', onPress: () => navigate && navigate('verify', user) },
+        ]);
+      } else {
+        Alert.alert(alert.title, alert.message);
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.screen}>
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => (step === 'confirm' ? setStep('input') : (navigate && navigate('home')))}
-          activeOpacity={0.7}
-        >
-          <Feather name="arrow-left" size={20} color="#0B0D1A" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>
-          {step === 'input' ? 'Data Subscription' : 'Confirm Transaction'}
-        </Text>
-        <View style={{ width: 38 }} />
-      </View>
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={colors.statusBarStyle} translucent backgroundColor="transparent" />
+      {step !== 'success' && (
+        <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+          <TouchableOpacity
+            style={[styles.backBtn, { backgroundColor: colors.card }]}
+            onPress={() => (step === 'confirm' ? setStep('input') : (navigate && navigate('home')))}
+            activeOpacity={0.7}
+          >
+            <Feather name="arrow-left" size={20} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>
+            {step === 'input' ? 'Data Subscription' : 'Confirm Transaction'}
+          </Text>
+          <View style={{ width: 38 }} />
+        </View>
+      )}
 
-      {step === 'input' ? (
+      {step === 'success' ? (
+        <SuccessView
+          title="Data Purchase Successful!"
+          subtitle={`Your ${selectedPlan?.product_plan_name || 'data'} plan on ${selectedNetwork?.network_name || ''} was activated.`}
+          amount={selectedPlan?.selling_price}
+          details={[
+            { label: 'Network', value: selectedNetwork?.network_name },
+            { label: 'Recipient', value: phone },
+            { label: 'Plan', value: selectedPlan?.product_plan_name },
+          ].filter((d) => d.value)}
+          onDone={() => navigate && navigate('home')}
+          colors={colors}
+        />
+      ) : step === 'input' ? (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <Text style={styles.sectionLabel}>Select Network</Text>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Select Network</Text>
           {loadingNetworks ? (
             <ActivityIndicator color={BRAND} style={{ marginTop: 10 }} />
           ) : (
@@ -204,15 +290,20 @@ export default function Data({ navigate, user }) {
               {networks.map((n) => {
                 const active = selectedNetwork?.id === n.id;
                 const color = NETWORK_COLORS[n.network_name?.toUpperCase()] || BRAND;
+                const logo = NETWORK_LOGOS[n.network_name?.toUpperCase()];
                 return (
                   <TouchableOpacity
                     key={n.id}
-                    style={[styles.networkPill, active && styles.networkPillActive]}
+                    style={[styles.networkPill, { backgroundColor: colors.card, borderColor: colors.border }, active && styles.networkPillActive]}
                     onPress={() => setSelectedNetwork(n)}
                     activeOpacity={0.8}
                   >
-                    <View style={[styles.networkDot, { backgroundColor: color }]} />
-                    <Text style={[styles.networkLabel, active && styles.networkLabelActive]}>
+                    {logo ? (
+                      <Image source={logo} style={styles.networkLogo} />
+                    ) : (
+                      <View style={[styles.networkDot, { backgroundColor: color }]} />
+                    )}
+                    <Text style={[styles.networkLabel, { color: colors.text }, active && styles.networkLabelActive]}>
                       {n.network_name}
                     </Text>
                     {active && (
@@ -226,88 +317,71 @@ export default function Data({ navigate, user }) {
             </View>
           )}
 
-          <Text style={styles.sectionLabel}>Phone Number</Text>
-          <View style={styles.inputCard}>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Phone Number (10 digits)</Text>
+          <View style={[styles.inputCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.flagWrap}>
               <Text style={styles.flagText}>🇳🇬</Text>
-              <Text style={styles.dialCode}>+234</Text>
+              <Text style={[styles.dialCode, { color: colors.text }]}>+234</Text>
             </View>
-            <View style={styles.inputDivider} />
+            <View style={[styles.inputDivider, { backgroundColor: colors.border }]} />
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: colors.text }]}
               placeholder="803 123 4567"
-              placeholderTextColor="#9CA0B8"
+              placeholderTextColor={colors.textFaint}
               keyboardType="phone-pad"
               maxLength={11}
               value={phone}
-              onChangeText={setPhone}
+              onChangeText={handlePhoneChange}
             />
-          </View>
-
-          <View style={styles.couponBanner}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.couponEyebrow}>Test 22</Text>
-              <Text style={styles.couponTitle}>Hellobrosam</Text>
-              <Text style={styles.couponSub}>For null</Text>
-            </View>
-            <TouchableOpacity activeOpacity={0.8}>
-              <Text style={styles.couponBtn}>Apply Coupon</Text>
+            <TouchableOpacity
+              style={styles.contactBtn}
+              onPress={() => setContactPickerVisible(true)}
+              activeOpacity={0.7}
+            >
+              <Feather name="user-plus" size={18} color={BRAND} />
             </TouchableOpacity>
           </View>
+          {phone.length > 0 && !isValidPhone(phone) && (
+            <Text style={styles.phoneErrorText}>Enter a valid 11-digit phone number</Text>
+          )}
+
+          <CouponCheck userId={user?.id} colors={colors} productSlug="data" />
 
           {selectedNetwork ? (
             <>
-              <Text style={styles.sectionLabel}>Data Category</Text>
+              <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Data Type</Text>
               {loadingCategories ? (
                 <ActivityIndicator color={BRAND} style={{ marginTop: 10 }} />
               ) : (
-                <View style={styles.categoryRow}>
-                  {categories.map((c) => {
-                    const active = selectedCategory?.id === c.id;
-                    return (
-                      <TouchableOpacity
-                        key={c.id}
-                        style={[styles.categoryChip, active && styles.categoryChipActive]}
-                        onPress={() => setSelectedCategory(c)}
-                        activeOpacity={0.8}
-                      >
-                        {c.is_hot_sales ? (
-                          <View style={styles.hotDot} />
-                        ) : null}
-                        <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>
-                          {c.product_plan_category_name}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                <CategoryTabs
+                  options={categories.map((c) => ({
+                    id: c.id,
+                    label: stripNetworkPrefix(c.product_plan_category_name, selectedNetwork?.network_name),
+                  }))}
+                  selectedId={selectedCategory?.id}
+                  onSelect={(opt) => setSelectedCategory(categories.find((c) => c.id === opt.id))}
+                  colors={colors}
+                />
               )}
 
               {selectedCategory ? (
                 <>
-                  <Text style={styles.sectionLabel}>Choose a Plan</Text>
+                  <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Select Plan</Text>
                   {loadingPlans ? (
                     <ActivityIndicator color={BRAND} style={{ marginTop: 10 }} />
                   ) : (
-                    <View style={styles.planList}>
-                      {plans.map((p) => {
-                        const active = selectedPlan?.product_plan_id === p.product_plan_id;
-                        return (
-                          <TouchableOpacity
-                            key={p.product_plan_id}
-                            style={[styles.planCard, active && styles.planCardActive]}
-                            onPress={() => setSelectedPlan(p)}
-                            activeOpacity={0.8}
-                          >
-                            <View style={{ flex: 1 }}>
-                              <Text style={[styles.planSize, active && styles.planSizeActive]}>{p.product_plan_name}</Text>
-                              <Text style={styles.planValidity}>{p.validity_in_days} Days Validity</Text>
-                            </View>
-                            <Text style={[styles.planPrice, active && styles.planSizeActive]}>₦{p.selling_price}</Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
+                    <PlanGrid
+                      plans={plans.map((p) => ({
+                        id: p.product_plan_id,
+                        meta: `${p.validity_in_days} days`,
+                        title: p.product_plan_name,
+                        price: p.selling_price,
+                        badge: selectedCategory.product_plan_category_name,
+                      }))}
+                      selectedId={selectedPlan?.product_plan_id}
+                      onSelect={(opt) => setSelectedPlan(plans.find((p) => p.product_plan_id === opt.id))}
+                      colors={colors}
+                    />
                   )}
                 </>
               ) : null}
@@ -315,7 +389,7 @@ export default function Data({ navigate, user }) {
           ) : (
             <View style={styles.emptyState}>
               <Feather name="box" size={40} color="#B7BCEF" />
-              <Text style={styles.emptyText}>
+              <Text style={[styles.emptyText, { color: colors.textFaint }]}>
                 Choose Your Preferred Network Provider to Discover Exclusive Offers Tailored to Your Network Preferences
               </Text>
             </View>
@@ -323,66 +397,98 @@ export default function Data({ navigate, user }) {
         </ScrollView>
       ) : (
         <View style={styles.confirmContent}>
-          <Text style={styles.sectionLabel}>Transaction Summary</Text>
-          <View style={styles.summaryCard}>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Transaction Summary</Text>
+          <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Network</Text>
-              <Text style={styles.summaryValue}>{selectedNetwork?.network_name}</Text>
+              <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Network</Text>
+              <View style={styles.summaryValueRow}>
+                {NETWORK_LOGOS[selectedNetwork?.network_name?.toUpperCase()] ? (
+                  <Image
+                    source={NETWORK_LOGOS[selectedNetwork.network_name.toUpperCase()]}
+                    style={styles.summaryLogo}
+                  />
+                ) : null}
+                <Text style={[styles.summaryValue, { color: colors.text }]}>{selectedNetwork?.network_name}</Text>
+              </View>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Recipient</Text>
-              <Text style={styles.summaryValue}>{phone}</Text>
+              <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Recipient</Text>
+              <Text style={[styles.summaryValue, { color: colors.text }]}>{phone}</Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Plan</Text>
-              <Text style={styles.summaryValue}>{selectedPlan?.product_plan_name}</Text>
+              <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Plan</Text>
+              <Text style={[styles.summaryValue, { color: colors.text }]}>{selectedPlan?.product_plan_name}</Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Total Cost</Text>
-              <Text style={[styles.summaryValue, { color: BRAND, fontFamily: FONTS.bold }]}>₦{selectedPlan?.selling_price}</Text>
+              <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Total Cost</Text>
+              <Text style={[styles.summaryValue, { color: BRAND, fontFamily: FONTS.bold }]}>₦{formatNaira(selectedPlan?.selling_price)}</Text>
             </View>
           </View>
 
-          <Text style={styles.pinInstructionText}>Enter 4-Digit Security PIN</Text>
-          <CustomPinInput onPinComplete={(text) => setPin(text)} />
+          <Text style={[styles.pinInstructionText, { color: colors.text }]}>Enter 4-Digit Security PIN</Text>
+          <CustomPinInput key={pinKey} onPinComplete={(text) => setPin(text)} colors={colors} />
         </View>
       )}
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
-        {step === 'input' ? (
-          <TouchableOpacity
-            style={[styles.continueBtn, (!selectedNetwork || !phone || !selectedCategory || !selectedPlan) && styles.continueBtnDisabled]}
-            activeOpacity={0.85}
-            onPress={handleFormSubmit}
-            disabled={!selectedNetwork || !phone || !selectedCategory || !selectedPlan}
-          >
-            <Text style={styles.continueText}>Continue</Text>
-            <Feather name="arrow-right" size={18} color="#FFFFFF" />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={[styles.continueBtn, (pin.length < 4 || loading) && styles.continueBtnDisabled]}
-            activeOpacity={0.85}
-            onPress={handleBuyData}
-            disabled={pin.length < 4 || loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <>
-                <Text style={styles.continueText}>Pay ₦{selectedPlan?.selling_price}</Text>
-                <Feather name="shield" size={18} color="#FFFFFF" />
-              </>
-            )}
-          </TouchableOpacity>
-        )}
-      </View>
+      {step !== 'success' && (
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 12, backgroundColor: colors.background }]}>
+          {step === 'input' ? (
+            <TouchableOpacity
+              style={[styles.continueBtn, (!selectedNetwork || !isValidPhone(phone) || !selectedCategory || !selectedPlan) && styles.continueBtnDisabled]}
+              activeOpacity={0.85}
+              onPress={handleFormSubmit}
+              disabled={!selectedNetwork || !isValidPhone(phone) || !selectedCategory || !selectedPlan}
+            >
+              <Text style={styles.continueText}>Continue</Text>
+              <Feather name="arrow-right" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.continueBtn, (pin.length < 4 || loading) && styles.continueBtnDisabled]}
+              activeOpacity={0.85}
+              onPress={handleBuyData}
+              disabled={pin.length < 4 || loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <>
+                  <Text style={styles.continueText}>Pay ₦{formatNaira(selectedPlan?.selling_price)}</Text>
+                  <Feather name="shield" size={18} color="#FFFFFF" />
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+      <ContactPicker
+        visible={contactPickerVisible}
+        onClose={() => setContactPickerVisible(false)}
+        onDone={(numbers) => handlePhoneChange(numbers[0] || '')}
+        colors={colors}
+      />
+      <WrongPinModal
+        visible={wrongPinVisible}
+        onClose={() => {
+          setWrongPinVisible(false);
+          setPin('');
+          setPinKey((k) => k + 1);
+        }}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#F7F8FC' },
+  phoneErrorText: {
+    fontFamily: FONTS.regular,
+    fontSize: 12,
+    color: '#D94F4F',
+    marginTop: -8,
+    marginBottom: 12,
+    marginLeft: 4,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -416,6 +522,7 @@ const styles = StyleSheet.create({
   },
   networkPillActive: { borderColor: BRAND, backgroundColor: 'rgba(74,85,221,0.06)' },
   networkDot: { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
+  networkLogo: { width: 26, height: 26, borderRadius: 13, marginRight: 8 },
   networkLabel: { fontFamily: FONTS.semibold, fontSize: 13, color: '#0B0D1A', flex: 1 },
   networkLabelActive: { color: BRAND },
   checkWrap: { width: 18, height: 18, borderRadius: 9, backgroundColor: BRAND, alignItems: 'center', justifyContent: 'center' },
@@ -428,46 +535,18 @@ const styles = StyleSheet.create({
   dialCode: { fontFamily: FONTS.semibold, fontSize: 14, color: '#0B0D1A' },
   inputDivider: { width: 1, height: 22, backgroundColor: '#ECEDF6', marginHorizontal: 12 },
   input: { flex: 1, fontFamily: FONTS.semibold, fontSize: 15, color: '#0B0D1A' },
-
-  couponBanner: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF',
-    borderRadius: 16, borderWidth: 1.5, borderColor: BRAND, padding: 14, marginTop: 16,
-  },
-  couponEyebrow: { fontFamily: FONTS.medium, fontSize: 11, color: '#9CA0B8' },
-  couponTitle: { fontFamily: FONTS.bold, fontSize: 14, color: BRAND, marginTop: 1 },
-  couponSub: { fontFamily: FONTS.regular, fontSize: 11, color: '#9CA0B8', marginTop: 1 },
-  couponBtn: { fontFamily: FONTS.bold, fontSize: 13, color: BRAND },
+  contactBtn: { paddingLeft: 10, paddingVertical: 6 },
 
   emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60, paddingHorizontal: 30 },
   emptyText: { fontFamily: FONTS.medium, fontSize: 13.5, color: '#9CA0B8', textAlign: 'center', marginTop: 14, lineHeight: 20 },
-
-  categoryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  categoryChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 9, paddingHorizontal: 14,
-    borderRadius: 12, backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: '#ECEDF6',
-  },
-  categoryChipActive: { backgroundColor: BRAND, borderColor: BRAND },
-  categoryChipText: { fontFamily: FONTS.semibold, fontSize: 12.5, color: '#0B0D1A' },
-  categoryChipTextActive: { color: '#FFFFFF' },
-  hotDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#F59E0B' },
-
-  planList: { gap: 10 },
-  planCard: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 14,
-    borderWidth: 1.5, borderColor: '#ECEDF6',
-  },
-  planCardActive: { borderColor: BRAND, backgroundColor: 'rgba(74,85,221,0.06)' },
-  planSize: { fontFamily: FONTS.bold, fontSize: 14, color: '#0B0D1A' },
-  planSizeActive: { color: BRAND },
-  planValidity: { fontFamily: FONTS.regular, fontSize: 11.5, color: '#9CA0B8', marginTop: 2 },
-  planPrice: { fontFamily: FONTS.bold, fontSize: 14, color: '#0B0D1A' },
 
   summaryCard: {
     backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16,
     borderWidth: 1.5, borderColor: '#ECEDF6', marginBottom: 30,
   },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 },
+  summaryValueRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  summaryLogo: { width: 20, height: 20, borderRadius: 10 },
   summaryLabel: { fontFamily: FONTS.medium, fontSize: 13, color: '#6B7088' },
   summaryValue: { fontFamily: FONTS.semibold, fontSize: 14, color: '#0B0D1A' },
   pinInstructionText: { fontFamily: FONTS.semibold, fontSize: 14, color: '#0B0D1A', textAlign: 'center', marginBottom: 16 },

@@ -5,10 +5,11 @@ import {
   TouchableOpacity,
   StyleSheet,
   Platform,
-  useWindowDimensions,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { useResponsive } from '../../../lib/responsive';
+import { SERVICES, SERVICE_SCREENS } from '../servicesConfig';
 
 const PADDING = 20;
 const CARD_PADDING = 14;
@@ -20,30 +21,8 @@ const FONTS = {
   bold: 'Manrope_700Bold',
 };
 
-const SERVICES = [
-  { id: 'airtime',      label: 'Airtime',      icon: 'call-outline',            color: '#4A55DD', bg: 'rgba(74,85,221,0.1)' },
-  { id: 'data',         label: 'Data',         icon: 'wifi-outline',            color: '#00C9A7', bg: 'rgba(0,201,167,0.1)' },
-  { id: 'electricity',  label: 'Electricity',  icon: 'flash-outline',           color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
-  { id: 'cable',        label: 'Cable TV',     icon: 'tv-outline',              color: '#EC4899', bg: 'rgba(236,72,153,0.1)' },
-  { id: 'bulk-sms',     label: 'Bulk\nRecharge', icon: 'phone-portrait-outline', color: '#7C3AED', bg: 'rgba(124,58,237,0.1)' },
-  { id: 'bulk-data',    label: 'Bulk Data',    icon: 'globe-outline',           color: '#06B6D4', bg: 'rgba(6,182,212,0.1)' },
-  { id: 'waec',         label: 'WAEC /\nNECO', icon: 'school-outline',          color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
-  { id: 'virtual-card', label: 'Virtual\nCard', icon: 'card-outline',           color: '#EF4444', bg: 'rgba(239,68,68,0.1)' },
-];
-
-// Maps a service id to the screen name used in App.js's `screen` state.
-// Services without an entry here don't have a screen built yet, so tapping
-// them is a no-op until one is added.
-const SERVICE_SCREENS = {
-  airtime: 'airtime',
-  data: 'data',
-  cable: 'cable',
-  electricity: 'electricity',
-  'bulk-sms': 'bulk',
-  waec: 'waec',
-};
-
 function ServiceItem({ service, onPress, itemSize, iconSize, textColor }) {
+  const IconComponent = service.iconSet === 'material' ? MaterialCommunityIcons : Ionicons;
   return (
     <TouchableOpacity
       style={[styles.item, { width: itemSize }]}
@@ -51,19 +30,22 @@ function ServiceItem({ service, onPress, itemSize, iconSize, textColor }) {
       activeOpacity={0.75}
     >
       <View style={[styles.iconWrap, { width: iconSize, height: iconSize, borderRadius: iconSize / 2, backgroundColor: service.bg }]}>
-        <Ionicons name={service.icon} size={iconSize * 0.5} color={service.color} />
+        <IconComponent name={service.icon} size={iconSize * 0.5} color={service.color} />
       </View>
       <Text style={[styles.label, { color: textColor }]}>{service.label}</Text>
     </TouchableOpacity>
   );
 }
 
-export default function ServicesGrid({ navigate, onServicePress }) {
+export default function ServicesGrid({ navigate, onServicePress, onSeeAllPress }) {
   const { colors } = useTheme();
-  const { width } = useWindowDimensions();
-  const isCompact = width < 360;
-  const iconSize = isCompact ? 44 : 52;
-  const itemSize = (width - PADDING * 2 - CARD_PADDING * 2 - GAP * (COLUMNS - 1)) / COLUMNS;
+  // Columns are measured against the capped content column, not the screen,
+  // or the four items spread across the whole tablet with the icons marooned
+  // in the middle of each cell.
+  const { isTablet, contentWidth } = useResponsive();
+  const isCompact = contentWidth < 360;
+  const iconSize = isCompact || isTablet ? 44 : 52;
+  const itemSize = (contentWidth - PADDING * 2 - CARD_PADDING * 2 - GAP * (COLUMNS - 1)) / COLUMNS;
 
   const handlePress = (service) => {
     if (onServicePress) {
@@ -80,7 +62,7 @@ export default function ServicesGrid({ navigate, onServicePress }) {
     <View style={styles.container}>
       <View style={styles.headerRow}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Services</Text>
-        <TouchableOpacity>
+        <TouchableOpacity onPress={onSeeAllPress}>
           <Text style={styles.seeAll}>See all</Text>
         </TouchableOpacity>
       </View>
@@ -99,13 +81,13 @@ export default function ServicesGrid({ navigate, onServicePress }) {
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: PADDING,
-    marginTop: 28,
+    marginTop: 16,
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 10,
   },
   sectionTitle: {
     fontFamily: FONTS.bold,

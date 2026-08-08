@@ -10,6 +10,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
 
@@ -91,6 +92,7 @@ function DotIndicator({ count, activeIndex }) {
 }
 
 export default function OnboardingScreen({ navigate }) {
+  const insets = useSafeAreaInsets();
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef(null);
 
@@ -121,7 +123,11 @@ export default function OnboardingScreen({ navigate }) {
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
       {!isLastSlide && (
-        <TouchableOpacity style={styles.skipBtn} onPress={handleSkip} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={[styles.skipBtn, { top: insets.top + 16 }]}
+          onPress={handleSkip}
+          activeOpacity={0.7}
+        >
           <Text style={styles.skipText}>Skip</Text>
         </TouchableOpacity>
       )}
@@ -139,7 +145,7 @@ export default function OnboardingScreen({ navigate }) {
         renderItem={({ item }) => <SlideItem item={item} />}
       />
 
-      <View style={styles.bottomBar}>
+      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 24 }]}>
         <DotIndicator count={slides.length} activeIndex={currentIndex} />
 
         <TouchableOpacity
@@ -171,7 +177,7 @@ export default function OnboardingScreen({ navigate }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#030512' },
   skipBtn: {
-    position: 'absolute', top: 56, right: 24, zIndex: 20,
+    position: 'absolute', right: 24, zIndex: 20,
     paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
     backgroundColor: 'transparent', borderWidth: 1,
     borderColor: COLORS.whiteAlpha20,
@@ -203,7 +209,7 @@ const styles = StyleSheet.create({
   bottomBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 28, paddingBottom: 52, paddingTop: 16,
+    paddingHorizontal: 28, paddingTop: 16,
   },
   dotRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   dot: { height: 8, borderRadius: 4 },

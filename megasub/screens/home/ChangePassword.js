@@ -2,15 +2,17 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
   Alert,
+  StatusBar,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../contexts/ThemeContext';
+import { forgotPassword } from '../../lib/api';
 
 const FONTS = {
   regular: 'Manrope_400Regular',
@@ -22,122 +24,72 @@ const FONTS = {
 
 const BRAND = '#4A55DD';
 
-function PasswordField({ label, value, onChangeText, placeholder }) {
-  const [visible, setVisible] = useState(false);
-  return (
-    <>
-      <Text style={styles.sectionLabel}>{label}</Text>
-      <View style={styles.inputCard}>
-        <TextInput
-          style={styles.input}
-          placeholder={placeholder}
-          placeholderTextColor="#9CA0B8"
-          secureTextEntry={!visible}
-          value={value}
-          onChangeText={onChangeText}
-        />
-        <TouchableOpacity onPress={() => setVisible(!visible)} activeOpacity={0.7}>
-          <Feather name={visible ? 'eye-off' : 'eye'} size={18} color="#9CA0B8" />
-        </TouchableOpacity>
-      </View>
-    </>
-  );
-}
-
-export default function ChangePassword({ navigate }) {
+export default function ChangePassword({ navigate, user }) {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
 
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const email = user?.email || '';
 
-  const passwordsMatch = newPassword.length > 0 && newPassword === confirmPassword;
-  const canSubmit = currentPassword.length > 0 && newPassword.length >= 8 && passwordsMatch;
-
-  const handleSubmit = async () => {
-    if (!canSubmit) return;
+  const handleSendReset = async () => {
+    if (!email) {
+      Alert.alert('No Email On File', 'We could not find an email address on your account. Please contact support.');
+      return;
+    }
 
     setLoading(true);
     try {
-      const payload = {
-        user_id: "9ccf0fe6-b32e-4672-9b63-65217a170220",
-        current_password: currentPassword,
-        new_password: newPassword,
-      };
-
-      const response = await fetch('https://YOUR_API_BASE_URL/external/change_password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const json = await response.json();
-
-      if (response.ok) {
-        Alert.alert('Password Updated', 'Your password has been changed.');
-        navigate && navigate('profile');
-      } else {
-        Alert.alert('Update Failed', json.message || 'Please check your current password and try again.');
-      }
+      await forgotPassword({ email });
+      Alert.alert(
+        'Check Your Email',
+        `We've sent password reset instructions to ${email}.`
+      );
+      navigate && navigate('profile');
     } catch (error) {
-      Alert.alert('Network Error', 'Could not update your password. Please try again.');
-      console.error(error);
+      Alert.alert('Could Not Send Reset Email', error.message || 'Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={colors.statusBarStyle} translucent backgroundColor="transparent" />
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity
-          style={styles.backBtn}
+          style={[styles.backBtn, { backgroundColor: colors.card }]}
           onPress={() => navigate && navigate('profile')}
           activeOpacity={0.7}
         >
-          <Feather name="arrow-left" size={20} color="#0B0D1A" />
+          <Feather name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Change Password</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Change Password</Text>
         <View style={{ width: 38 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <PasswordField
-          label="Current Password"
-          placeholder="Enter current password"
-          value={currentPassword}
-          onChangeText={setCurrentPassword}
-        />
-        <PasswordField
-          label="New Password"
-          placeholder="At least 8 characters"
-          value={newPassword}
-          onChangeText={setNewPassword}
-        />
-        <PasswordField
-          label="Confirm New Password"
-          placeholder="Re-enter new password"
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-        />
-
-        {confirmPassword.length > 0 && !passwordsMatch ? (
-          <Text style={styles.errorText}>New password and confirmation don't match</Text>
-        ) : null}
+        <View style={[styles.iconWrap, { backgroundColor: colors.card }]}>
+          <Feather name="mail" size={28} color={BRAND} />
+        </View>
+        <Text style={[styles.title, { color: colors.text }]}>Reset Your Password by Email</Text>
+        <Text style={[styles.subtitle, { color: colors.textMuted }]}>
+          {email
+            ? `We'll send a password reset link to ${email}. Follow the link to set a new password.`
+            : 'We could not find an email address on your account.'}
+        </Text>
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 12, backgroundColor: colors.background }]}>
         <TouchableOpacity
-          style={[styles.continueBtn, (!canSubmit || loading) && styles.continueBtnDisabled]}
+          style={[styles.continueBtn, (loading || !email) && styles.continueBtnDisabled]}
           activeOpacity={0.85}
-          onPress={handleSubmit}
-          disabled={!canSubmit || loading}
+          onPress={handleSendReset}
+          disabled={loading || !email}
         >
           {loading ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.continueText}>Update Password</Text>
+            <Text style={styles.continueText}>Send Reset Email</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -168,16 +120,18 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
   },
   headerTitle: { fontFamily: FONTS.bold, fontSize: 16, color: '#0B0D1A' },
-  scrollContent: { paddingHorizontal: 20, paddingBottom: 30 },
-  sectionLabel: { fontFamily: FONTS.semibold, fontSize: 13, color: '#6B7088', marginTop: 22, marginBottom: 10 },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 40, alignItems: 'center' },
 
-  inputCard: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF',
-    borderRadius: 16, paddingHorizontal: 16, height: 56, borderWidth: 1.5, borderColor: '#ECEDF6',
+  iconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
   },
-  input: { flex: 1, fontFamily: FONTS.semibold, fontSize: 15, color: '#0B0D1A' },
-
-  errorText: { fontFamily: FONTS.medium, fontSize: 12.5, color: '#EF4444', textAlign: 'center', marginTop: 18 },
+  title: { fontFamily: FONTS.bold, fontSize: 18, color: '#0B0D1A', textAlign: 'center', marginBottom: 10 },
+  subtitle: { fontFamily: FONTS.regular, fontSize: 14, color: '#6B7088', textAlign: 'center', lineHeight: 21, paddingHorizontal: 8 },
 
   footer: { paddingHorizontal: 20, paddingTop: 12, backgroundColor: '#F7F8FC' },
   continueBtn: {

@@ -16,6 +16,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
+import { useResponsive } from '../lib/responsive';
+import { signInWithGoogle, isGoogleSignInCancelled } from '../lib/googleAuth';
+import TermsModal from './home/components/TermsModal';
 
 const BASE_URL = 'https://mega-sub.com/api/v1/external';
 const USER_KEY = 'megasub_user_data';
@@ -53,13 +56,17 @@ function FormInput({
   keyboardType,
   autoCapitalize,
   error,
+  required,
 }) {
   const [focused, setFocused] = useState(false);
   const [shown, setShown] = useState(false);
 
   return (
     <View style={inputStyles.wrapper}>
-      <Text style={inputStyles.label}>{label}</Text>
+      <Text style={inputStyles.label}>
+        {label}
+        {required ? <Text style={inputStyles.required}> *</Text> : null}
+      </Text>
       <View
         style={[
           inputStyles.box,
@@ -102,6 +109,9 @@ const inputStyles = StyleSheet.create({
     color: COLORS.label,
     marginBottom: 6,
   },
+  required: {
+    color: COLORS.error,
+  },
   box: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -139,6 +149,7 @@ const inputStyles = StyleSheet.create({
 
 export default function SignupScreen({ navigate }) {
   const insets = useSafeAreaInsets();
+  const { column } = useResponsive();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [username, setUsername] = useState('');
@@ -146,7 +157,9 @@ export default function SignupScreen({ navigate }) {
   const [password, setPassword] = useState('');
   const [referral, setReferral] = useState('');
   const [agreed, setAgreed] = useState(false);
+  const [termsVisible, setTermsVisible] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
   function validate() {
@@ -176,9 +189,11 @@ export default function SignupScreen({ navigate }) {
         tnc: 1,
       };
 
-      // Only add referral if provided
+      // referral_code accepts either the upline's custom referral code or
+      // their registered phone number — upline_referral_phone_number is no
+      // longer used by the backend.
       if (referral.trim()) {
-        requestBody.upline_referral_phone_number = referral.trim();
+        requestBody.referral_code = referral.trim();
       }
 
       console.log('📤 Sending registration request:', requestBody);
@@ -192,10 +207,23 @@ export default function SignupScreen({ navigate }) {
         body: JSON.stringify(requestBody),
       });
 
-      const json = await res.json();
+      // A crashed backend can answer with an HTML error page (or an empty
+      // body) instead of JSON, which would otherwise throw here and get
+      // reported as a connection problem the user can't act on.
+      const json = await res.json().catch(() => ({}));
       console.log('📥 Full API Response:', JSON.stringify(json, null, 2));
       console.log('📥 Response status code:', res.status);
       console.log('📥 Response status field:', json.status);
+
+      // 5xx means the backend failed before it ever assessed the details the
+      // user typed, so it must not be reported as a rejected registration.
+      if (res.status >= 500) {
+        Alert.alert(
+          'Megasub Is Unavailable',
+          "We couldn't reach Megasub's servers just now. This isn't a problem with your details — please try again in a few minutes."
+        );
+        return;
+      }
 
       // Handle validation errors (422 status code)
       if (res.status === 422 && json.errors) {
@@ -254,7 +282,6 @@ export default function SignupScreen({ navigate }) {
         last_name: userDataFromApi.last_name || lastName,
         username: userDataFromApi.username || username,
         email: userDataFromApi.email || email,
-        phone_verification: 0,
         phone_number: '',
         token: token,
         role_id: userDataFromApi.role_id || '',
@@ -274,9 +301,11 @@ export default function SignupScreen({ navigate }) {
       await SecureStore.setItemAsync(SESSION_KEY, token);
       await SecureStore.setItemAsync(USER_KEY, JSON.stringify(userData));
 
-      // ✅ Navigate with FULL user data
-      console.log('✅ Registration successful! Navigating to phone verification with user data...');
-      navigate && navigate('verify', userData);
+      // ✅ Navigate with FULL user data — email must be confirmed first
+      // (register() auto-sends the 6-digit code and creates the account as
+      // unverified), then the existing phone-verification/PIN step follows.
+      console.log('✅ Registration successful! Navigating to email verification with user data...');
+      navigate && navigate('email-verify', userData);
       
     } catch (err) {
       console.error('❌ Network Error:', err);
@@ -286,8 +315,28 @@ export default function SignupScreen({ navigate }) {
     }
   }
 
-  function handleGoogle() {
-    console.log('Google sign in');
+  async function handleGoogle() {
+    // Google sign-in can create a brand-new account (tnc:true is always
+    // sent), so it needs the same consent this screen already requires for
+    // email signup before it's allowed to proceed.
+    if (!agreed) {
+      setErrors((prev) => ({ ...prev, agreed: 'You must agree to the Terms and Conditions' }));
+      return;
+    }
+
+    setGoogleLoading(true);
+    try {
+      const { userData, requiresPhoneVerification } = await signInWithGoogle({
+        deviceName: Platform.OS === 'ios' ? 'iOS Device' : 'Android Device',
+        referralCode: referral.trim(),
+      });
+      navigate && navigate(requiresPhoneVerification ? 'verify' : 'home', userData);
+    } catch (err) {
+      if (isGoogleSignInCancelled(err)) return;
+      Alert.alert('Google Sign-In Failed', err.message || 'Please try again.');
+    } finally {
+      setGoogleLoading(false);
+    }
   }
 
   return (
@@ -302,7 +351,7 @@ export default function SignupScreen({ navigate }) {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         {/* Fixed header: logo + heading + Google button never scroll away */}
-        <View style={[styles.header, { paddingTop: insets.top + 24 }]}>
+        <View style={[styles.header, { paddingTop: insets.top + 24 }, column]}>
           <View style={styles.logoWrap}>
             <Image
               source={require('../assets/logo.png')}
@@ -318,15 +367,22 @@ export default function SignupScreen({ navigate }) {
             style={styles.googleBtn}
             onPress={handleGoogle}
             activeOpacity={0.8}
+            disabled={googleLoading || loading}
           >
-            <View style={styles.googleIconWrap}>
-              <Image
-                source={require('../assets/google.png')}
-                style={styles.googleIconImg}
-                resizeMode="contain"
-              />
-            </View>
-            <Text style={styles.googleText}>Continue with Google</Text>
+            {googleLoading ? (
+              <ActivityIndicator color={COLORS.primary} size="small" />
+            ) : (
+              <>
+                <View style={styles.googleIconWrap}>
+                  <Image
+                    source={require('../assets/google.png')}
+                    style={styles.googleIconImg}
+                    resizeMode="contain"
+                  />
+                </View>
+                <Text style={styles.googleText}>Continue with Google</Text>
+              </>
+            )}
           </TouchableOpacity>
 
           <View style={styles.dividerRow}>
@@ -337,7 +393,7 @@ export default function SignupScreen({ navigate }) {
         </View>
 
         <ScrollView
-          contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}
+          contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }, column]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -350,6 +406,7 @@ export default function SignupScreen({ navigate }) {
                 onChangeText={setFirstName}
                 autoCapitalize="words"
                 error={errors.firstName}
+                required
               />
             </View>
             <View style={{ width: 12 }} />
@@ -361,6 +418,7 @@ export default function SignupScreen({ navigate }) {
                 onChangeText={setLastName}
                 autoCapitalize="words"
                 error={errors.lastName}
+                required
               />
             </View>
           </View>
@@ -371,6 +429,7 @@ export default function SignupScreen({ navigate }) {
             value={username}
             onChangeText={setUsername}
             error={errors.username}
+            required
           />
 
           <FormInput
@@ -380,6 +439,7 @@ export default function SignupScreen({ navigate }) {
             onChangeText={setEmail}
             keyboardType="email-address"
             error={errors.email}
+            required
           />
 
           <FormInput
@@ -389,6 +449,7 @@ export default function SignupScreen({ navigate }) {
             onChangeText={setPassword}
             secureTextEntry={true}
             error={errors.password}
+            required
           />
 
           <FormInput
@@ -412,7 +473,9 @@ export default function SignupScreen({ navigate }) {
             <View style={{ flex: 1 }}>
               <Text style={styles.checkLabel}>
                 I have read the{' '}
-                <Text style={styles.checkLink}>Terms and Conditions</Text>
+                <Text style={styles.checkLink} onPress={() => setTermsVisible(true)}>
+                  Terms and Conditions
+                </Text>
                 {' '}of Megasub
               </Text>
               {errors.agreed ? (
@@ -420,6 +483,8 @@ export default function SignupScreen({ navigate }) {
               ) : null}
             </View>
           </TouchableOpacity>
+
+          <TermsModal visible={termsVisible} onClose={() => setTermsVisible(false)} />
 
           <TouchableOpacity
             style={[styles.signupBtn, loading && styles.signupBtnDisabled]}

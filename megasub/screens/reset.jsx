@@ -14,6 +14,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useResponsive } from '../lib/responsive';
 
 const BASE_URL = 'https://mega-sub.com/api/v1/external';
 
@@ -114,6 +116,8 @@ const inputStyles = StyleSheet.create({
 });
 
 export default function ResetPasswordScreen({ navigate }) {
+  const insets = useSafeAreaInsets();
+  const { column } = useResponsive();
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -193,7 +197,7 @@ export default function ResetPasswordScreen({ navigate }) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 24 }, column]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -306,7 +310,6 @@ const styles = StyleSheet.create({
   },
   scroll: {
     paddingHorizontal: 24,
-    paddingTop: 56,
   },
   glowTop: {
     position: 'absolute',

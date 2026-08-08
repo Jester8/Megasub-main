@@ -8,8 +8,8 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  Modal,
-  Pressable,
+  StatusBar,
+  Image,
 } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,6 +19,12 @@ import {
   validateMetreNumber,
   buyElectricity,
 } from '../../../lib/api';
+import { useTheme } from '../../../contexts/ThemeContext';
+import CategoryTabs from '../components/CategoryTabs';
+import OptionList from '../components/OptionList';
+import SuccessView from '../components/SuccessView';
+import WrongPinModal from '../components/WrongPinModal';
+import { formatNaira, alertForPurchaseError, sanitizePositiveInt } from '../../../lib/format';
 
 const FONTS = {
   regular: 'Manrope_400Regular',
@@ -31,7 +37,29 @@ const FONTS = {
 const BRAND = '#4A55DD';
 const QUICK_AMOUNTS = [1000, 2000, 3000, 5000, 10000, 20000];
 
-function CustomPinInput({ onPinComplete }) {
+// Matched against the plan's provider label by substring — DISCO names are
+// embedded in product_plan_name (e.g. "IBADAN {IBEDC}", "ABUJA {AEDC}").
+// Unmatched DISCOs just show no badge.
+const DISCO_LOGOS = [
+  { match: 'IBADAN', logo: require('../../../assets/networks/ibedc.png') },
+  { match: 'IBEDC', logo: require('../../../assets/networks/ibedc.png') },
+  { match: 'ABUJA', logo: require('../../../assets/networks/abuja.png') },
+  { match: 'PORT', logo: require('../../../assets/networks/portharcourt.png') },
+  { match: 'PHED', logo: require('../../../assets/networks/portharcourt.png') },
+  { match: 'KADUNA', logo: require('../../../assets/networks/kaduna.png') },
+  { match: 'ENUGU', logo: require('../../../assets/networks/enugu.png') },
+  { match: 'EEDC', logo: require('../../../assets/networks/enugu.png') },
+  { match: 'EKO', logo: require('../../../assets/networks/eko.png') },
+  { match: 'IKEJA', logo: require('../../../assets/networks/ikeja.png') },
+  { match: 'KANO', logo: require('../../../assets/networks/kano.png') },
+];
+
+function discoLogo(label) {
+  const upper = (label || '').toUpperCase();
+  return DISCO_LOGOS.find((d) => upper.includes(d.match))?.logo;
+}
+
+function CustomPinInput({ onPinComplete, colors }) {
   const [code, setCode] = useState(['', '', '', '']);
   const inputs = useRef([]);
 
@@ -45,6 +73,11 @@ function CustomPinInput({ onPinComplete }) {
 
     if (cleanText && index < 3) {
       inputs.current[index + 1].focus();
+    } else if (!cleanText && index > 0) {
+      // Deleting used to just clear the box and leave focus there, so the
+      // very next backspace press had nothing to do — advancing back to the
+      // previous box here means backspacing flows continuously across boxes.
+      inputs.current[index - 1].focus();
     }
   };
 
@@ -60,7 +93,11 @@ function CustomPinInput({ onPinComplete }) {
         <TextInput
           key={index}
           ref={(ref) => (inputs.current[index] = ref)}
-          style={[styles.otpInputBox, digit ? styles.otpInputFilled : null]}
+          style={[
+            styles.otpInputBox,
+            { color: colors?.text, backgroundColor: colors?.card, borderColor: colors?.border },
+            digit ? styles.otpInputFilled : null,
+          ]}
           keyboardType="number-pad"
           maxLength={1}
           secureTextEntry={true}
@@ -74,66 +111,27 @@ function CustomPinInput({ onPinComplete }) {
   );
 }
 
-function SelectField({ label, value, onPress, disabled }) {
-  return (
-    <TouchableOpacity
-      style={[styles.selectField, disabled && styles.selectFieldDisabled]}
-      onPress={onPress}
-      activeOpacity={0.8}
-      disabled={disabled}
-    >
-      <Text style={[styles.selectValue, !value && styles.selectPlaceholder]}>
-        {value || label}
-      </Text>
-      <Feather name="chevron-down" size={18} color="#9CA0B8" />
-    </TouchableOpacity>
-  );
-}
-
-function PickerModal({ visible, title, options, onSelect, onClose }) {
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <Pressable style={styles.overlayTouch} onPress={onClose} />
-        <View style={styles.sheet}>
-          <View style={styles.sheetHandle} />
-          <Text style={styles.sheetTitle}>{title}</Text>
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetList}>
-            {options.map((opt) => (
-              <TouchableOpacity
-                key={opt.id}
-                style={styles.sheetItem}
-                onPress={() => onSelect(opt)}
-                activeOpacity={0.75}
-              >
-                <Text style={styles.sheetItemLabel}>{opt.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
 export default function Electricity({ navigate, user }) {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
   const [step, setStep] = useState('input');
 
-  const [providers, setProviders] = useState([]);
-  const [loadingProviders, setLoadingProviders] = useState(true);
-  const [allPlans, setAllPlans] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+  const [plans, setPlans] = useState([]);
   const [loadingPlans, setLoadingPlans] = useState(true);
 
-  const [selectedProvider, setSelectedProvider] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [selectedPlan, setSelectedPlan] = useState(null);
   const [meterNumber, setMeterNumber] = useState('');
   const [amount, setAmount] = useState('');
 
-  const [providerModalVisible, setProviderModalVisible] = useState(false);
-
   const [pin, setPin] = useState('');
+  const [pinKey, setPinKey] = useState(0);
+  const [wrongPinVisible, setWrongPinVisible] = useState(false);
   const [validating, setValidating] = useState(false);
   const [validated, setValidated] = useState(null); // { name, address }
+  const [validationError, setValidationError] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -141,33 +139,48 @@ export default function Electricity({ navigate, user }) {
   }, []);
 
   const loadCatalog = async () => {
-    setLoadingProviders(true);
+    setLoadingCategories(true);
     setLoadingPlans(true);
     try {
+      // fetch_product_plan_categories returns the billing type ("PREPAID")
+      // — the actual distribution companies (IBEDC, AEDC, EKEDC, etc.) live
+      // one level down, in each plan's product_plan_name.
       const [categoriesJson, plansJson] = await Promise.all([
         fetchProductPlanCategories({ userId: user?.id, productSlug: 'utility_bills' }),
         fetchProductPlans({ userId: user?.id, productSlug: 'utility_bills', amount: 100 }),
       ]);
-      setProviders(
-        (categoriesJson.data || []).map((c) => ({ id: c.id, label: c.product_plan_category_name }))
-      );
-      setAllPlans(plansJson.data || []);
+      const categoryList = (categoriesJson.data || []).map((c) => ({ id: c.id, label: c.product_plan_category_name }));
+      setCategories(categoryList);
+      if (categoryList.length > 0) setSelectedCategory(categoryList[0]);
+      setPlans(plansJson.data || []);
     } catch (error) {
       Alert.alert('Network Error', error.message || 'Could not load electricity providers.');
     } finally {
-      setLoadingProviders(false);
+      setLoadingCategories(false);
       setLoadingPlans(false);
     }
   };
 
-  const selectedPlan = useMemo(
-    () => (selectedProvider ? allPlans.find((p) => p.product_plan_category_id === selectedProvider.id) : null),
-    [selectedProvider, allPlans]
+  // "PREPAID IBADAN {IBEDC}" -> "IBADAN {IBEDC}" — the category name is
+  // already shown above the list, so the prefix on every row is just noise.
+  const providerLabel = (plan) => plan.product_plan_name.replace(/^PREPAID\s*/i, '').trim() || plan.product_plan_name;
+
+  const providers = useMemo(
+    () =>
+      plans
+        .filter((p) => !selectedCategory || p.product_plan_category_id === selectedCategory.id)
+        .map((p) => ({ id: p.product_plan_id, label: providerLabel(p), logo: discoLogo(providerLabel(p)) })),
+    [plans, selectedCategory]
   );
 
+  useEffect(() => {
+    setSelectedPlan(null);
+  }, [selectedCategory]);
+
   const handleFormSubmit = () => {
-    if (!selectedProvider || !selectedPlan || !meterNumber || !amount) return;
+    if (!selectedPlan || !meterNumber || !amount) return;
     setValidated(null);
+    setValidationError(false);
     setStep('confirm');
   };
 
@@ -175,6 +188,7 @@ export default function Electricity({ navigate, user }) {
     if (pin.length < 4) return;
 
     setValidating(true);
+    setValidationError(false);
     try {
       const json = await validateMetreNumber({
         user_id: user?.id,
@@ -184,7 +198,7 @@ export default function Electricity({ navigate, user }) {
       });
       setValidated({ name: json.data?.name || null, address: json.data?.address || null });
     } catch (error) {
-      Alert.alert('Validation Failed', error.message || 'Could not validate this meter number.');
+      setValidationError(true);
     } finally {
       setValidating(false);
     }
@@ -199,78 +213,119 @@ export default function Electricity({ navigate, user }) {
         user_id: user?.id,
         metre_number: meterNumber,
         validation_extra_info: validated.name,
-        electricity_product_plan_category_id: selectedProvider.id,
+        electricity_product_plan_category_id: selectedPlan.product_plan_category_id,
         electricity_product_plan_id: selectedPlan.product_plan_id,
         amount: String(amount),
+        // Documented in the updated API spec alongside amount — buy_airtime
+        // already 403s without its equivalent ("The actual amount field is
+        // required"), so send it here too rather than wait for the same bug.
+        actual_amount: String(amount),
         pin,
       };
 
       await buyElectricity(payload);
-      Alert.alert('Success 🎉', 'Electricity purchase processing complete.');
-      navigate && navigate('home');
+      setStep('success');
     } catch (error) {
-      Alert.alert('Transaction Failed', error.message || 'Please check your information and PIN.');
+      const alert = alertForPurchaseError(error);
+      if (alert.isWrongPin) {
+        setWrongPinVisible(true);
+      } else if (alert.requiresPhoneVerification) {
+        Alert.alert(alert.title, alert.message, [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Verify Phone', onPress: () => navigate && navigate('verify', user) },
+        ]);
+      } else {
+        Alert.alert(alert.title, alert.message);
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.screen}>
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => (step === 'confirm' ? setStep('input') : (navigate && navigate('home')))}
-          activeOpacity={0.7}
-        >
-          <Feather name="arrow-left" size={20} color="#0B0D1A" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>
-          {step === 'input' ? 'Electricity Bill' : 'Confirm Transaction'}
-        </Text>
-        <View style={{ width: 38 }} />
-      </View>
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={colors.statusBarStyle} translucent backgroundColor="transparent" />
+      {step !== 'success' && (
+        <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+          <TouchableOpacity
+            style={[styles.backBtn, { backgroundColor: colors.card }]}
+            onPress={() => (step === 'confirm' ? setStep('input') : (navigate && navigate('home')))}
+            activeOpacity={0.7}
+          >
+            <Feather name="arrow-left" size={20} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>
+            {step === 'input' ? 'Electricity Bill' : 'Confirm Transaction'}
+          </Text>
+          <View style={{ width: 38 }} />
+        </View>
+      )}
 
-      {step === 'input' ? (
+      {step === 'success' ? (
+        <SuccessView
+          title="Electricity Purchased!"
+          subtitle={`Your ${selectedPlan ? providerLabel(selectedPlan) : ''} bill payment was successful.`}
+          amount={amount}
+          details={[
+            { label: 'Provider', value: selectedPlan ? providerLabel(selectedPlan) : null },
+            { label: 'Meter Number', value: meterNumber },
+            { label: 'Customer Name', value: validated?.name },
+            { label: 'Address', value: validated?.address },
+          ].filter((d) => d.value)}
+          onDone={() => navigate && navigate('home')}
+          colors={colors}
+        />
+      ) : step === 'input' ? (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <Text style={styles.sectionLabel}>Select Provider</Text>
-          {loadingProviders ? (
+          <Text style={[styles.sectionLabel, { color: colors.textMuted, marginTop: 0 }]}>Billing Type</Text>
+          {loadingCategories ? (
             <ActivityIndicator color={BRAND} style={{ marginTop: 10 }} />
           ) : (
-            <SelectField
-              label="Select Provider"
-              value={selectedProvider?.label}
-              onPress={() => setProviderModalVisible(true)}
+            <CategoryTabs
+              options={categories}
+              selectedId={selectedCategory?.id}
+              onSelect={(opt) => setSelectedCategory(categories.find((c) => c.id === opt.id))}
+              colors={colors}
             />
           )}
 
-          {selectedProvider && !loadingPlans && !selectedPlan ? (
-            <Text style={styles.errorText}>No plan is currently available for this provider.</Text>
-          ) : null}
+          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Select Provider *</Text>
+          {loadingPlans ? (
+            <ActivityIndicator color={BRAND} style={{ marginTop: 10 }} />
+          ) : (
+            <OptionList
+              options={providers}
+              selectedId={selectedPlan?.product_plan_id}
+              onSelect={(opt) => setSelectedPlan(plans.find((p) => p.product_plan_id === opt.id) || null)}
+              colors={colors}
+              horizontal
+            />
+          )}
 
-          <Text style={styles.sectionLabel}>Meter Number</Text>
-          <View style={styles.inputCard}>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Meter Number (11 digits)</Text>
+          <View style={[styles.inputCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: colors.text }]}
               placeholder="Meter number"
-              placeholderTextColor="#9CA0B8"
+              placeholderTextColor={colors.textFaint}
               keyboardType="number-pad"
+              maxLength={11}
               value={meterNumber}
               onChangeText={setMeterNumber}
             />
           </View>
 
-          <Text style={styles.sectionLabel}>Amount</Text>
-          <View style={styles.inputCard}>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Amount</Text>
+          <View style={[styles.inputCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={styles.nairaSign}>₦</Text>
-            <View style={styles.inputDivider} />
+            <View style={[styles.inputDivider, { backgroundColor: colors.border }]} />
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: colors.text }]}
               placeholder="Enter amount"
-              placeholderTextColor="#9CA0B8"
+              placeholderTextColor={colors.textFaint}
               keyboardType="number-pad"
               value={amount}
-              onChangeText={setAmount}
+              onChangeText={(text) => setAmount(sanitizePositiveInt(text))}
             />
           </View>
 
@@ -280,12 +335,12 @@ export default function Electricity({ navigate, user }) {
               return (
                 <TouchableOpacity
                   key={a}
-                  style={[styles.quickChip, active && styles.quickChipActive]}
+                  style={[styles.quickChip, { backgroundColor: colors.card, borderColor: colors.border }, active && styles.quickChipActive]}
                   onPress={() => setAmount(String(a))}
                   activeOpacity={0.75}
                 >
-                  <Text style={[styles.quickChipText, active && styles.quickChipTextActive]}>
-                    ₦{a}
+                  <Text style={[styles.quickChipText, { color: colors.text }, active && styles.quickChipTextActive]}>
+                    ₦{formatNaira(a)}
                   </Text>
                 </TouchableOpacity>
               );
@@ -294,101 +349,110 @@ export default function Electricity({ navigate, user }) {
         </ScrollView>
       ) : (
         <View style={styles.confirmContent}>
-          <Text style={styles.sectionLabel}>Transaction Summary</Text>
-          <View style={styles.summaryCard}>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Transaction Summary</Text>
+          <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Provider</Text>
-              <Text style={styles.summaryValue}>{selectedProvider?.label}</Text>
+              <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Provider</Text>
+              <View style={styles.summaryValueRow}>
+                {selectedPlan && discoLogo(providerLabel(selectedPlan)) ? (
+                  <Image source={discoLogo(providerLabel(selectedPlan))} style={styles.summaryLogo} />
+                ) : null}
+                <Text style={[styles.summaryValue, { color: colors.text }]}>{selectedPlan ? providerLabel(selectedPlan) : ''}</Text>
+              </View>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Meter Number</Text>
-              <Text style={styles.summaryValue}>{meterNumber}</Text>
+              <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Meter Number</Text>
+              <Text style={[styles.summaryValue, { color: colors.text }]}>{meterNumber}</Text>
             </View>
             {validated?.name ? (
               <>
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Customer Name</Text>
+                  <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Customer Name</Text>
                   <Text style={[styles.summaryValue, { color: '#10B981' }]}>{validated.name}</Text>
                 </View>
                 {validated.address ? (
                   <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Address</Text>
-                    <Text style={[styles.summaryValue, { flex: 1, textAlign: 'right' }]}>{validated.address}</Text>
+                    <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Address</Text>
+                    <Text style={[styles.summaryValue, { color: colors.text, flex: 1, textAlign: 'right' }]}>{validated.address}</Text>
                   </View>
                 ) : null}
               </>
             ) : null}
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Total Cost</Text>
-              <Text style={[styles.summaryValue, { color: BRAND, fontFamily: FONTS.bold }]}>₦{amount}</Text>
+              <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Total Cost</Text>
+              <Text style={[styles.summaryValue, { color: BRAND, fontFamily: FONTS.bold }]}>₦{formatNaira(amount)}</Text>
             </View>
           </View>
 
-          <Text style={styles.pinInstructionText}>
+          <Text style={[styles.pinInstructionText, { color: colors.text }]}>
             {validated?.name ? 'Enter 4-Digit Security PIN to Pay' : 'Enter Your PIN to Validate Meter'}
           </Text>
-          <CustomPinInput onPinComplete={(text) => setPin(text)} />
+          <CustomPinInput key={pinKey} onPinComplete={(text) => setPin(text)} colors={colors} />
 
           {validated?.name ? (
             <View style={styles.validatedBanner}>
               <Ionicons name="checkmark-circle" size={16} color="#10B981" />
               <Text style={styles.validatedBannerText}>Meter validated for {validated.name}</Text>
             </View>
+          ) : validationError ? (
+            <View style={styles.errorBanner}>
+              <Ionicons name="alert-circle" size={16} color="#EF4444" />
+              <Text style={styles.errorBannerText}>An error occurred. Please try again.</Text>
+            </View>
           ) : null}
         </View>
       )}
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
-        {step === 'input' ? (
-          <TouchableOpacity
-            style={[styles.continueBtn, (!selectedProvider || !selectedPlan || !meterNumber || !amount) && styles.continueBtnDisabled]}
-            activeOpacity={0.85}
-            onPress={handleFormSubmit}
-            disabled={!selectedProvider || !selectedPlan || !meterNumber || !amount}
-          >
-            <Text style={styles.continueText}>Continue</Text>
-            <Feather name="arrow-right" size={18} color="#FFFFFF" />
-          </TouchableOpacity>
-        ) : !validated?.name ? (
-          <TouchableOpacity
-            style={[styles.continueBtn, (pin.length < 4 || validating) && styles.continueBtnDisabled]}
-            activeOpacity={0.85}
-            onPress={handleValidate}
-            disabled={pin.length < 4 || validating}
-          >
-            {validating ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.continueText}>Validate Meter</Text>
-            )}
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={[styles.continueBtn, (pin.length < 4 || loading) && styles.continueBtnDisabled]}
-            activeOpacity={0.85}
-            onPress={handleBuy}
-            disabled={pin.length < 4 || loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <>
-                <Text style={styles.continueText}>Pay ₦{amount}</Text>
-                <Feather name="shield" size={18} color="#FFFFFF" />
-              </>
-            )}
-          </TouchableOpacity>
-        )}
-      </View>
-
-      <PickerModal
-        visible={providerModalVisible}
-        title="Select Provider"
-        options={providers}
-        onClose={() => setProviderModalVisible(false)}
-        onSelect={(opt) => {
-          setSelectedProvider(opt);
-          setProviderModalVisible(false);
+      {step !== 'success' && (
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 12, backgroundColor: colors.background }]}>
+          {step === 'input' ? (
+            <TouchableOpacity
+              style={[styles.continueBtn, (!selectedPlan || !meterNumber || !amount) && styles.continueBtnDisabled]}
+              activeOpacity={0.85}
+              onPress={handleFormSubmit}
+              disabled={!selectedPlan || !meterNumber || !(Number(amount) > 0)}
+            >
+              <Text style={styles.continueText}>Continue</Text>
+              <Feather name="arrow-right" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+          ) : !validated?.name ? (
+            <TouchableOpacity
+              style={[styles.continueBtn, (pin.length < 4 || validating) && styles.continueBtnDisabled]}
+              activeOpacity={0.85}
+              onPress={handleValidate}
+              disabled={pin.length < 4 || validating}
+            >
+              {validating ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.continueText}>Validate Meter</Text>
+              )}
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.continueBtn, (pin.length < 4 || loading) && styles.continueBtnDisabled]}
+              activeOpacity={0.85}
+              onPress={handleBuy}
+              disabled={pin.length < 4 || loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <>
+                  <Text style={styles.continueText}>Pay ₦{formatNaira(amount)}</Text>
+                  <Feather name="shield" size={18} color="#FFFFFF" />
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+      <WrongPinModal
+        visible={wrongPinVisible}
+        onClose={() => {
+          setWrongPinVisible(false);
+          setPin('');
+          setPinKey((k) => k + 1);
         }}
       />
     </View>
@@ -423,17 +487,6 @@ const styles = StyleSheet.create({
   confirmContent: { paddingHorizontal: 20, paddingTop: 10 },
   sectionLabel: { fontFamily: FONTS.semibold, fontSize: 13, color: '#6B7088', marginTop: 22, marginBottom: 10 },
 
-  selectField: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF', borderRadius: 16, paddingHorizontal: 16, height: 56,
-    borderWidth: 1.5, borderColor: '#ECEDF6',
-  },
-  selectFieldDisabled: { opacity: 0.5 },
-  selectValue: { fontFamily: FONTS.semibold, fontSize: 14, color: '#0B0D1A' },
-  selectPlaceholder: { fontFamily: FONTS.medium, color: '#9CA0B8' },
-
-  errorText: { fontFamily: FONTS.medium, fontSize: 12, color: '#EF4444', marginTop: 8 },
-
   inputCard: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF',
     borderRadius: 16, paddingHorizontal: 16, height: 56, borderWidth: 1.5, borderColor: '#ECEDF6',
@@ -452,6 +505,8 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: '#ECEDF6', marginBottom: 30,
   },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, gap: 12 },
+  summaryValueRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  summaryLogo: { width: 20, height: 20, borderRadius: 10 },
   summaryLabel: { fontFamily: FONTS.medium, fontSize: 13, color: '#6B7088' },
   summaryValue: { fontFamily: FONTS.semibold, fontSize: 14, color: '#0B0D1A' },
   pinInstructionText: { fontFamily: FONTS.semibold, fontSize: 14, color: '#0B0D1A', textAlign: 'center', marginBottom: 16 },
@@ -461,6 +516,11 @@ const styles = StyleSheet.create({
     marginTop: 18,
   },
   validatedBannerText: { fontFamily: FONTS.medium, fontSize: 12.5, color: '#10B981' },
+  errorBanner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    marginTop: 18,
+  },
+  errorBannerText: { fontFamily: FONTS.medium, fontSize: 12.5, color: '#EF4444' },
 
   otpContainer: { flexDirection: 'row', justifyContent: 'space-between', width: '80%', alignSelf: 'center', marginVertical: 10, gap: 12 },
   otpInputBox: { width: 50, height: 50, borderWidth: 2, borderColor: '#ECEDF6', borderRadius: 12, fontSize: 20, fontWeight: '700', color: '#0B0D1A', backgroundColor: '#FFFFFF' },
@@ -474,32 +534,4 @@ const styles = StyleSheet.create({
   },
   continueBtnDisabled: { backgroundColor: '#B7BCEF', shadowOpacity: 0, elevation: 0 },
   continueText: { fontFamily: FONTS.bold, fontSize: 15, color: '#FFFFFF' },
-
-  overlay: { flex: 1, backgroundColor: 'rgba(11,13,26,0.4)' },
-  overlayTouch: { flex: 1 },
-  sheet: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingTop: 10,
-    paddingHorizontal: 20,
-    maxHeight: '60%',
-  },
-  sheetHandle: {
-    width: 40, height: 4, borderRadius: 2,
-    backgroundColor: 'rgba(11,13,26,0.12)',
-    alignSelf: 'center', marginBottom: 14,
-  },
-  sheetTitle: {
-    fontFamily: FONTS.extrabold,
-    fontWeight: '800',
-    fontSize: 17,
-    color: '#0B0D1A',
-    marginBottom: 12,
-  },
-  sheetList: { paddingBottom: 30 },
-  sheetItem: {
-    paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(11,13,26,0.06)',
-  },
-  sheetItemLabel: { fontFamily: FONTS.semibold, fontSize: 14, color: '#0B0D1A' },
 });

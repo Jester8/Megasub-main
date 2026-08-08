@@ -17,7 +17,18 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
+import { useResponsive } from '../lib/responsive';
+import {
+  requestPhoneVerification,
+  confirmPhoneVerified,
+  markPhoneLinked,
+  fetchNairaFundingOptions,
+  generateNairaVirtualAccount,
+  pickFundingOption,
+  resolveGenerationBank,
+} from '../lib/api';
 
 const { width, height } = Dimensions.get('window');
 
@@ -145,8 +156,15 @@ const inputStyles = StyleSheet.create({
   },
 });
 
-export default function VerifyScreen({ navigate, route }) {
-  const userData = route?.params || {};
+export default function VerifyScreen({ navigate, user }) {
+  const insets = useSafeAreaInsets();
+  const { column, dialog } = useResponsive();
+  const userData = user || {};
+  // A user routed back here for a missing phone (not a fresh signup) already
+  // has a PIN on the backend — this step re-collects it rather than setting
+  // a new one, since there's no standalone "verify my PIN" endpoint and the
+  // account-generation call needs the real value in hand either way.
+  const isReturningUser = !!userData.pin_set;
 
   const token = userData.token || null;
   const userId = userData.id || userData.userId || null;
@@ -155,6 +173,8 @@ export default function VerifyScreen({ navigate, route }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState(phone_number || '');
   const [otp, setOtp] = useState('');
+  const [pin, setPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
   const [step, setStep] = useState('phone');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
@@ -189,64 +209,109 @@ export default function VerifyScreen({ navigate, route }) {
 
   function validateOTP() {
     const e = {};
-    if (!otp.trim()) e.otp = 'OTP code is required';
-    else if (otp.trim().length < 4) e.otp = 'Enter a valid OTP';
+    if (!otp.trim()) e.otp = 'Verification code is required';
+    else if (otp.trim().length < 4) e.otp = 'Enter the code you received';
     setErrors(e);
     return Object.keys(e).length === 0;
   }
 
-  // 1. Initial Request to Send verification OTP
+  function validatePin() {
+    const e = {};
+    if (!pin.trim() || pin.trim().length !== 4) e.pin = 'Enter a 4-digit PIN';
+    if (confirmPin.trim() !== pin.trim()) e.confirmPin = "PINs don't match";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  }
+
+  // Shared tail of both the automatic and the manual code path. The
+  // successful confirm is the only available proof — this API exposes no way
+  // to read a phone number back, so there is nothing further to check.
+  async function finishPhoneVerified() {
+    // Top-up calls ensurePhoneOnFile before generating; without this it would
+    // text the user a second code for a number just verified.
+    markPhoneLinked(userIdState, phoneNumber.trim());
+
+    const updatedUser = {
+      ...savedUserData,
+      phone_verification: 1,
+      phone_number: phoneNumber.trim(),
+    };
+
+    setSavedUserData(updatedUser);
+    await SecureStore.setItemAsync(USER_KEY, JSON.stringify(updatedUser));
+
+    // Phone is linked, but the account has no transaction PIN yet — that's
+    // required before any purchase can go through, so it's the next
+    // mandatory step rather than a trip straight to the dashboard.
+    setErrors({});
+    setStep('pin');
+  }
+
+  // 1. Put the phone number on the account server-side, then ask for the
+  // code Termii just texted to it.
   async function handleSendOTP() {
     if (!validatePhone()) return;
-    
+
     setLoading(true);
     try {
-      console.log('📤 Sending phone number validation request to:', `${BASE_URL}/phone_verification`);
-      
-      const res = await fetch(`${BASE_URL}/phone_verification`, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          // Pass authorization token if needed by external endpoint gateway setup
-          Authorization: userToken ? `Bearer ${userToken}` : '',
-        },
-        body: JSON.stringify({
-          phone_number: phoneNumber.trim(),
-        }),
+      if (userToken) await SecureStore.setItemAsync(SESSION_KEY, userToken);
+
+      const json = await requestPhoneVerification({
+        userId: userIdState,
+        phoneNumber: phoneNumber.trim(),
       });
+      console.log('📤 phone_verification accepted:', JSON.stringify(json));
 
-      const json = await res.json();
-      console.log('📥 Send OTP Response Status:', res.status);
-      console.log('📥 Send OTP Response JSON:', json);
+      // Re-verifying a known number answers "This number has already been
+      // verified" with status true — there is no code left to confirm.
+      const alreadyVerified = /already been verified/i.test(json.message || '');
 
-      if (!res.ok || json.status === false) {
-        Alert.alert('Error', json.message || 'Failed to send verification code. Please check your number.');
+      if (alreadyVerified) {
+        await finishPhoneVerified();
         return;
       }
-      
+
       setStep('otp');
       setCountdown(60);
       setResendDisabled(true);
-      Alert.alert('OTP Sent', json.message || `A verification code has been sent to ${phoneNumber.trim()}`);
-      
+      Alert.alert(
+        'Verification Code',
+        json.message || `Enter the code sent to ${phoneNumber.trim()}.`
+      );
     } catch (err) {
-      console.error('❌ Send OTP Network Error:', err);
-      Alert.alert('Network Error', 'Could not connect to server. Check your connection and try again.');
+      Alert.alert('Could Not Verify Phone', err.message || 'Please check the number and try again.');
     } finally {
       setLoading(false);
     }
   }
 
-  // 2. Secondary confirmation of OTP
+  // 2. Manual fallback: confirm the code the user actually received.
   async function handleVerifyOTP() {
     if (!validateOTP()) return;
-    
+
     setLoading(true);
     try {
-      console.log('📤 Confirming verification OTP via:', `${BASE_URL}/confirm_phone_verification`);
+      const verified = await confirmPhoneVerified({ userId: userIdState, otp: otp.trim() });
+      if (!verified) {
+        setErrors({ otp: 'That code was not accepted. Please check it and try again.' });
+        return;
+      }
+      await finishPhoneVerified();
+    } catch (err) {
+      Alert.alert('Verification Failed', err.message || 'The code was not accepted. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
 
-      const res = await fetch(`${BASE_URL}/confirm_phone_verification`, {
+  // 3. Set the transaction PIN used to authorize every purchase (airtime,
+  // data, cable, electricity) — required before the dashboard is reachable.
+  async function handleSetPin() {
+    if (!validatePin()) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${BASE_URL}/set_transaction_pin`, {
         method: 'POST',
         headers: {
           Accept: 'application/json',
@@ -254,61 +319,79 @@ export default function VerifyScreen({ navigate, route }) {
           Authorization: userToken ? `Bearer ${userToken}` : '',
         },
         body: JSON.stringify({
-          phone_number: phoneNumber.trim(),
-          otp_code: otp.trim(), // matches verification backend key maps
+          user_id: userIdState,
+          pin: pin.trim(),
+          confirm_pin: confirmPin.trim(),
         }),
       });
 
       const json = await res.json();
-      console.log('📥 Confirm OTP Response Status:', res.status);
-      console.log('📥 Confirm OTP Response JSON:', json);
 
       if (!res.ok || json.status === false) {
-        Alert.alert('Verification Failed', json.message || 'Invalid or expired OTP code. Please try again.');
+        Alert.alert('Could Not Set PIN', json.message || 'Please try again.');
         return;
       }
-      
-      // Update data record mapping layout blocks locally
-      const updatedUser = {
-        ...savedUserData,
-        phone_verification: 1,
-        phone_number: phoneNumber.trim(),
-      };
-      
+
+      const updatedUser = { ...savedUserData, pin_set: true };
+      setSavedUserData(updatedUser);
       await SecureStore.setItemAsync(USER_KEY, JSON.stringify(updatedUser));
-      
-      if (userToken) {
-        await SecureStore.setItemAsync(SESSION_KEY, userToken);
-      }
 
-      Alert.alert('Success', 'Phone number verified successfully!', [
-        {
-          text: 'Continue to Dashboard',
-          onPress: () => {
-            setModalVisible(false);
-            navigate && navigate('home', updatedUser);
-          }
-        }
-      ]);
+      // The PIN the generate call needs only exists at this exact point in
+      // the app — at login there is nothing but an email and a password — so
+      // this is the app's one chance to have the account ready before the
+      // user ever opens Top-up. Fired without awaiting: the user is not held
+      // on this screen if the provider is slow or failing, and the backend
+      // creates the account at login anyway if this doesn't land.
+      createFundingAccount();
 
+      setModalVisible(false);
+      navigate && navigate('home', updatedUser);
     } catch (err) {
-      console.error('❌ Confirm OTP Network Error:', err);
-      Alert.alert('Network Error', 'Verification service unreachable. Check network status.');
+      Alert.alert('Network Error', 'Could not reach the server. Check your connection and try again.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  // 4. Create the funding account while the PIN is still in hand: pick Secure
+  // Wave out of the funding options and generate on Kolomoni (bank code 1).
+  //
+  // Deliberately best effort and never awaited. Nothing here is required for
+  // the user to reach the dashboard — if it fails, the backend creates the
+  // account at login, and Top-up generates on demand as a last resort. The
+  // phone was verified moments ago in this same flow, so it is NOT re-sent
+  // here: that would text the user a second code for no reason.
+  async function createFundingAccount() {
+    try {
+      const optJson = await fetchNairaFundingOptions(userIdState);
+      const option = pickFundingOption(optJson.data || []);
+      if (!option) {
+        console.log('⚠️ No funding provider available at signup.');
+        return;
+      }
+
+      const bank = resolveGenerationBank(option);
+      console.log('🏦 Generating on', option.funding_option_name, JSON.stringify(bank));
+
+      await generateNairaVirtualAccount({
+        user_id: userIdState,
+        bank_code: bank.code,
+        pin: pin.trim(),
+        funding_option_id: option.id,
+      });
+      console.log('✅ Funding account created at signup.');
+    } catch (err) {
+      // "already have an account generated" means the backend beat us to it.
+      if (/already have an account/i.test(err.message || '')) {
+        console.log('✅ Funding account already exists.');
+        return;
+      }
+      console.log('⚠️ Not created at signup, leaving it to login/Top-up:', err.message);
     }
   }
 
   function handleDemoFill() {
     setPhoneNumber('08168509044');
-  }
-
-  function handleDemoOTP() {
-    setOtp('1234');
-  }
-
-  function handleSkip() {
-    navigate && navigate('home', savedUserData);
   }
 
   return (
@@ -323,7 +406,7 @@ export default function VerifyScreen({ navigate, route }) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 24 }, column]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -356,14 +439,6 @@ export default function VerifyScreen({ navigate, route }) {
             <Text style={styles.verifyBtnText}>Verify Phone Number</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.skipBtn}
-            onPress={handleSkip}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.skipBtnText}>Skip for now</Text>
-          </TouchableOpacity>
-
           <View style={{ height: 40 }} />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -377,7 +452,7 @@ export default function VerifyScreen({ navigate, route }) {
         <TouchableWithoutFeedback onPress={() => setModalVisible(false)}>
           <View style={styles.modalOverlay}>
             <TouchableWithoutFeedback onPress={() => {}}>
-              <View style={styles.modalContainer}>
+              <View style={[styles.modalContainer, dialog]}>
                 <View style={styles.modalHeader}>
                   <TouchableOpacity
                     style={styles.modalCloseIcon}
@@ -386,16 +461,24 @@ export default function VerifyScreen({ navigate, route }) {
                         setStep('phone');
                         setOtp('');
                         setErrors({});
-                      } else {
+                      } else if (step === 'phone') {
                         setModalVisible(false);
                       }
+                      // No way to close out of 'pin' — a transaction PIN is
+                      // mandatory before Home.
                     }}
                     activeOpacity={0.7}
                   >
-                    <Ionicons name="close-outline" size={28} color={COLORS.text} />
+                    {step !== 'pin' && (
+                      <Ionicons name="close-outline" size={28} color={COLORS.text} />
+                    )}
                   </TouchableOpacity>
                   <Text style={styles.modalHeaderTitle}>
-                    {step === 'phone' ? 'Verify Phone' : 'Enter OTP'}
+                    {step === 'phone'
+                      ? 'Verify Phone'
+                      : step === 'otp'
+                      ? 'Enter OTP'
+                      : (isReturningUser ? 'Confirm Transaction PIN' : 'Set Transaction PIN')}
                   </Text>
                   <View style={{ width: 28 }} />
                 </View>
@@ -407,20 +490,34 @@ export default function VerifyScreen({ navigate, route }) {
                 >
                   <View style={styles.modalBody}>
                     <View style={styles.modalIconContainer}>
-                      <Ionicons 
-                        name={step === 'phone' ? 'call-outline' : 'shield-checkmark-outline'} 
-                        size={60} 
-                        color={COLORS.primary} 
+                      <Ionicons
+                        name={
+                          step === 'phone'
+                            ? 'call-outline'
+                            : step === 'otp'
+                            ? 'shield-checkmark-outline'
+                            : 'lock-closed-outline'
+                        }
+                        size={60}
+                        color={COLORS.primary}
                       />
                     </View>
 
                     <Text style={styles.modalTitle}>
-                      {step === 'phone' ? 'Add Your Phone Number' : 'Verify Your Code'}
+                      {step === 'phone'
+                        ? 'Add Your Phone Number'
+                        : step === 'otp'
+                        ? 'Verify Your Code'
+                        : (isReturningUser ? 'Confirm Your Transaction PIN' : 'Set Your Transaction PIN')}
                     </Text>
                     <Text style={styles.modalSubtitle}>
-                      {step === 'phone' 
-                        ? 'We\'ll send a verification code to your phone number' 
-                        : `Enter the 4-digit code sent to ${phoneNumber}`}
+                      {step === 'phone'
+                        ? 'Your number is registered with Megasub — it\'s required before your funding account can be created.'
+                        : step === 'otp'
+                        ? `Enter the verification code to confirm ${phoneNumber}`
+                        : (isReturningUser
+                            ? 'Enter your existing 4-digit transaction PIN to continue.'
+                            : 'Choose a 4-digit PIN. You\'ll use it to authorize every purchase, and to open Top-up.')}
                     </Text>
 
                     {step === 'phone' ? (
@@ -452,16 +549,16 @@ export default function VerifyScreen({ navigate, route }) {
                           {loading ? (
                             <ActivityIndicator color={COLORS.white} size="small" />
                           ) : (
-                            <Text style={styles.modalBtnText}>Send Verification Code</Text>
+                            <Text style={styles.modalBtnText}>Verify Phone & Continue</Text>
                           )}
                         </TouchableOpacity>
                       </>
-                    ) : (
+                    ) : step === 'otp' ? (
                       <>
                         <View style={styles.otpContainer}>
                           <FormInput
-                            label="Enter OTP"
-                            placeholder="Enter 4-digit code"
+                            label="Enter Verification Code"
+                            placeholder="Enter the code you received"
                             value={otp}
                             onChangeText={setOtp}
                             keyboardType="number-pad"
@@ -469,14 +566,6 @@ export default function VerifyScreen({ navigate, route }) {
                             error={errors.otp}
                           />
                         </View>
-
-                        <TouchableOpacity
-                          style={styles.demoFillBtn}
-                          onPress={handleDemoOTP}
-                          activeOpacity={0.8}
-                        >
-                          <Text style={styles.demoFillBtnText}>Use demo OTP: 1234</Text>
-                        </TouchableOpacity>
 
                         <TouchableOpacity
                           style={[styles.modalBtn, loading && styles.modalBtnDisabled]}
@@ -506,8 +595,47 @@ export default function VerifyScreen({ navigate, route }) {
                           </Text>
                         </TouchableOpacity>
                       </>
-                    )}
+                    ) : step === 'pin' ? (
+                      <>
+                        <FormInput
+                          label={isReturningUser ? 'Your 4-Digit PIN' : '4-Digit PIN'}
+                          placeholder="••••"
+                          value={pin}
+                          onChangeText={setPin}
+                          keyboardType="number-pad"
+                          secureTextEntry
+                          maxLength={4}
+                          error={errors.pin}
+                        />
+                        <FormInput
+                          label="Confirm PIN"
+                          placeholder="••••"
+                          value={confirmPin}
+                          onChangeText={setConfirmPin}
+                          keyboardType="number-pad"
+                          secureTextEntry
+                          maxLength={4}
+                          error={errors.confirmPin}
+                        />
 
+                        <TouchableOpacity
+                          style={[styles.modalBtn, loading && styles.modalBtnDisabled]}
+                          onPress={handleSetPin}
+                          activeOpacity={0.85}
+                          disabled={loading}
+                        >
+                          {loading ? (
+                            <ActivityIndicator color={COLORS.white} size="small" />
+                          ) : (
+                            <Text style={styles.modalBtnText}>
+                              {isReturningUser ? 'Confirm & Continue' : 'Save PIN & Continue'}
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      </>
+                    ) : null}
+
+                    {step !== 'pin' && (
                     <TouchableOpacity
                       style={styles.modalBackBtn}
                       onPress={() => {
@@ -526,6 +654,7 @@ export default function VerifyScreen({ navigate, route }) {
                         {step === 'otp' ? '← Change Phone Number' : 'Cancel'}
                       </Text>
                     </TouchableOpacity>
+                    )}
                   </View>
                 </ScrollView>
               </View>
@@ -544,7 +673,6 @@ const styles = StyleSheet.create({
   },
   scroll: {
     paddingHorizontal: 24,
-    paddingTop: 64,
     flexGrow: 1,
   },
   glowTop: {
@@ -632,15 +760,6 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.bold,
     fontSize: 15,
     color: COLORS.white,
-  },
-  skipBtn: {
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  skipBtnText: {
-    fontFamily: FONTS.medium,
-    fontSize: 14,
-    color: COLORS.muted,
   },
   modalOverlay: {
     flex: 1,

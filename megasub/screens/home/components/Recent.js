@@ -1,85 +1,92 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
+  ActivityIndicator,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, Feather } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { useResponsive } from '../../../lib/responsive';
+import { fetchTransactions } from '../../../lib/api';
+import { CATEGORY_STYLE, DEFAULT_STYLE, formatDateShort, toDateParam } from '../../../lib/transactionMeta';
+import ReceiptModal from './ReceiptModal';
 
 const FONTS = {
   regular: 'Manrope_400Regular',
+  medium: 'Manrope_500Medium',
   semibold: 'Manrope_600SemiBold',
   bold: 'Manrope_700Bold',
 };
 
 const PADDING = 20;
 const CARD_PADDING = 16;
+const VISIBLE_COUNT = 4;
+const WINDOW_DAYS = 30;
 
-const TRANSACTIONS = [
-  {
-    id: '1',
-    title: 'Airtime Recharge',
-    subtitle: 'MTN • Today, 10:24 AM',
-    amount: '-₦1,000',
-    type: 'debit',
-    icon: 'call',
-    color: '#4A55DD',
-    bg: 'rgba(74,85,221,0.1)',
-  },
-  {
-    id: '2',
-    title: 'Wallet Funding',
-    subtitle: 'Bank Transfer • Today, 9:02 AM',
-    amount: '+₦15,000',
-    type: 'credit',
-    icon: 'arrow-down-circle',
-    color: '#10B981',
-    bg: 'rgba(16,185,129,0.1)',
-  },
-  {
-    id: '3',
-    title: 'Electricity Bill',
-    subtitle: 'Ikeja Electric • Yesterday',
-    amount: '-₦5,500',
-    type: 'debit',
-    icon: 'flash',
-    color: '#F59E0B',
-    bg: 'rgba(245,158,11,0.1)',
-  },
-  {
-    id: '4',
-    title: 'Data Subscription',
-    subtitle: 'Airtel • Yesterday',
-    amount: '-₦2,000',
-    type: 'debit',
-    icon: 'wifi',
-    color: '#00C9A7',
-    bg: 'rgba(0,201,167,0.1)',
-  },
-];
-
-function TransactionItem({ tx, colors }) {
-  const isCredit = tx.type === 'credit';
+function TransactionItem({ tx, colors, onPress, isTablet }) {
+  const visual = CATEGORY_STYLE[tx.transaction_category] || DEFAULT_STYLE;
+  const amount = Number(tx.amount || tx.discounted_amount || 0);
   return (
-    <TouchableOpacity style={styles.txItem} activeOpacity={0.75}>
-      <View style={[styles.iconWrap, { backgroundColor: tx.bg }]}>
-        <Ionicons name={tx.icon} size={20} color={tx.color} />
+    <TouchableOpacity style={styles.txItem} activeOpacity={0.75} onPress={onPress}>
+      <View style={[styles.iconWrap, isTablet && styles.iconWrapTablet, { backgroundColor: visual.bg }]}>
+        <Ionicons name={visual.icon} size={isTablet ? 18 : 20} color={visual.color} />
       </View>
       <View style={styles.txInfo}>
-        <Text style={[styles.txTitle, { color: colors.text }]}>{tx.title}</Text>
-        <Text style={[styles.txSubtitle, { color: colors.textMuted }]}>{tx.subtitle}</Text>
+        <Text style={[styles.txTitle, { color: colors.text }]} numberOfLines={1}>{tx.description || 'Transaction'}</Text>
+        <Text style={[styles.txSubtitle, { color: colors.textMuted }]}>{formatDateShort(tx.created_at)}</Text>
       </View>
-      <Text style={[styles.txAmount, isCredit ? styles.txAmountCredit : { color: colors.text }]}>
-        {tx.amount}
-      </Text>
+      <Text style={[styles.txAmount, { color: colors.text }]}>₦{amount.toLocaleString()}</Text>
     </TouchableOpacity>
   );
 }
 
-export default function RecentTransactions({ onSeeAllPress }) {
+export default function RecentTransactions({ user, onSeeAllPress, refreshSignal }) {
   const { colors } = useTheme();
+  const { isTablet } = useResponsive();
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selectedTx, setSelectedTx] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const dateTo = new Date();
+        const dateFrom = new Date();
+        dateFrom.setDate(dateFrom.getDate() - WINDOW_DAYS);
+
+        const json = await fetchTransactions({
+          userId: user?.id,
+          dateFrom: toDateParam(dateFrom),
+          dateTo: toDateParam(dateTo),
+        });
+
+        if (cancelled) return;
+        const list = [...(json.data || [])]
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .slice(0, VISIBLE_COUNT);
+        setTransactions(list);
+      } catch (err) {
+        if (!cancelled) setError(err.message || 'Could not load your transactions.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    if (user?.id) load();
+    else setLoading(false);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, refreshSignal]);
+
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
@@ -90,13 +97,37 @@ export default function RecentTransactions({ onSeeAllPress }) {
       </View>
 
       <View style={[styles.card, { backgroundColor: colors.card }]}>
-        {TRANSACTIONS.map((tx, index) => (
-          <View key={tx.id}>
-            <TransactionItem tx={tx} colors={colors} />
-            {index < TRANSACTIONS.length - 1 && <View style={[styles.divider, { backgroundColor: colors.divider }]} />}
+        {loading ? (
+          <ActivityIndicator color="#4A55DD" style={styles.loader} />
+        ) : error ? (
+          <View style={styles.emptyState}>
+            <Feather name="wifi-off" size={28} color="#B7BCEF" />
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>{error}</Text>
           </View>
-        ))}
+        ) : transactions.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Feather name="inbox" size={28} color="#B7BCEF" />
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>No transactions yet</Text>
+            <Text style={[styles.emptySubtext, { color: colors.textFaint }]}>
+              Your airtime, data and bill payments will show up here.
+            </Text>
+          </View>
+        ) : (
+          transactions.map((tx, index) => (
+            <View key={tx.id}>
+              <TransactionItem tx={tx} colors={colors} isTablet={isTablet} onPress={() => setSelectedTx(tx)} />
+              {index < transactions.length - 1 && <View style={[styles.divider, { backgroundColor: colors.divider }]} />}
+            </View>
+          ))
+        )}
       </View>
+
+      <ReceiptModal
+        visible={!!selectedTx}
+        transaction={selectedTx}
+        onClose={() => setSelectedTx(null)}
+        colors={colors}
+      />
     </View>
   );
 }
@@ -104,13 +135,13 @@ export default function RecentTransactions({ onSeeAllPress }) {
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: PADDING,
-    marginTop: 28,
+    marginTop: 16,
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 10,
   },
   sectionTitle: {
     fontFamily: FONTS.bold,
@@ -126,7 +157,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgb(255, 255, 255)',
     borderRadius: 20,
     padding: CARD_PADDING,
+    minHeight: 84,
   },
+  loader: { paddingVertical: 20 },
+  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 20, gap: 4 },
+  emptyText: { fontFamily: FONTS.semibold, fontSize: 13, marginTop: 8 },
+  emptySubtext: { fontFamily: FONTS.regular, fontSize: 11.5, textAlign: 'center', paddingHorizontal: 20 },
   txItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -140,8 +176,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
+  iconWrapTablet: { width: 38, height: 38, borderRadius: 19 },
   txInfo: {
     flex: 1,
+    paddingRight: 8,
   },
   txTitle: {
     fontFamily: FONTS.bold,
@@ -157,12 +195,6 @@ const styles = StyleSheet.create({
   txAmount: {
     fontFamily: FONTS.bold,
     fontSize: 13.5,
-  },
-  txAmountCredit: {
-    color: '#10B981',
-  },
-  txAmountDebit: {
-    color: '#0B0D1A',
   },
   divider: {
     height: 1,

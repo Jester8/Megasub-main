@@ -1,19 +1,27 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
   Alert,
   StatusBar,
   Switch,
+  Modal,
+  Pressable,
+  Platform,
 } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
+import * as LocalAuthentication from 'expo-local-authentication';
 import BottomNav from './components/BottomNav';
 import { useTheme } from '../../contexts/ThemeContext';
+import { clearCachedVirtualAccounts, deleteAccount, updateFingerprintOption } from '../../lib/api';
+
+const BIOMETRIC_LABEL = Platform.OS === 'ios' ? 'Face ID' : 'Fingerprint';
 
 const FONTS = {
   regular: 'Manrope_400Regular',
@@ -26,6 +34,7 @@ const FONTS = {
 const BRAND = '#4A55DD';
 const SESSION_KEY = 'megasub_session_token';
 const USER_KEY = 'megasub_user_data';
+const BIOMETRIC_KEY = 'megasub_biometric_enabled';
 
 function Row({ icon, color, bg, label, value, onPress, destructive, colors, rightElement }) {
   return (
@@ -58,6 +67,60 @@ function Section({ title, colors, children }) {
 export default function Profile({ navigate, user }) {
   const insets = useSafeAreaInsets();
   const { colors, isDark, toggleTheme } = useTheme();
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const isGoogleAccount = user?.auth_provider === 'google';
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const [hasHardware, isEnrolled, storedFlag] = await Promise.all([
+        LocalAuthentication.hasHardwareAsync(),
+        LocalAuthentication.isEnrolledAsync(),
+        SecureStore.getItemAsync(BIOMETRIC_KEY),
+      ]);
+      setBiometricAvailable(hasHardware && isEnrolled);
+      setBiometricEnabled(storedFlag === 'true');
+    })();
+  }, []);
+
+  // Enabling requires proving the enrolled face/fingerprint actually works
+  // right now, rather than just flipping a switch — avoids silently locking
+  // the user out later with a biometric that was never actually confirmed.
+  const handleToggleBiometric = async (value) => {
+    if (!value) {
+      await SecureStore.setItemAsync(BIOMETRIC_KEY, 'false');
+      setBiometricEnabled(false);
+      // Best effort — the local flag is what actually gates the app, so a
+      // failed sync here shouldn't block the user from turning it off.
+      updateFingerprintOption({ userId: user?.id, enabled: false }).catch(() => {});
+      return;
+    }
+
+    const hasHardware = await LocalAuthentication.hasHardwareAsync();
+    const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+    if (!hasHardware || !isEnrolled) {
+      setBiometricAvailable(false);
+      Alert.alert(
+        `${BIOMETRIC_LABEL} Not Available`,
+        `Set up ${BIOMETRIC_LABEL} in your device settings first, then try again here.`
+      );
+      return;
+    }
+
+    const result = await LocalAuthentication.authenticateAsync({
+      promptMessage: `Confirm ${BIOMETRIC_LABEL} to enable app lock`,
+      disableDeviceFallback: false,
+    });
+    if (result.success) {
+      await SecureStore.setItemAsync(BIOMETRIC_KEY, 'true');
+      setBiometricEnabled(true);
+      updateFingerprintOption({ userId: user?.id, enabled: true }).catch(() => {});
+    }
+  };
 
   const displayName =
     (user?.first_name && user?.last_name && `${user.first_name} ${user.last_name}`) ||
@@ -84,12 +147,52 @@ export default function Profile({ navigate, user }) {
         text: 'Log Out',
         style: 'destructive',
         onPress: async () => {
+          // Only the session token gets cleared, same as handleUnauthorized
+          // in App.js. USER_KEY holds phone_number/pin_set — there's no
+          // server field for either, so wiping it here would erase that
+          // memory and force the user through phone + PIN setup again on
+          // every single re-login.
           await SecureStore.deleteItemAsync(SESSION_KEY);
-          await SecureStore.deleteItemAsync(USER_KEY);
+          // A different person may log in next on this device — the cached
+          // account list belongs to whoever just logged out.
+          clearCachedVirtualAccounts();
           navigate && navigate('login');
         },
       },
     ]);
+  };
+
+  // DELETE /delete_account permanently removes the account server-side.
+  // Google-created accounts may have no password on file, so it's sent only
+  // when we know the account has one. Local data is only cleared after the
+  // server confirms the delete — a wrong password or network failure must
+  // not leave the device thinking the account is gone when it isn't.
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText.trim().toUpperCase() !== 'DELETE') return;
+    if (!isGoogleAccount && !deletePassword) {
+      Alert.alert('Password Required', 'Enter your password to confirm account deletion.');
+      return;
+    }
+
+    setDeleteLoading(true);
+    try {
+      await deleteAccount({
+        userId: user?.id,
+        password: isGoogleAccount ? undefined : deletePassword,
+      });
+
+      await SecureStore.deleteItemAsync(SESSION_KEY);
+      await SecureStore.deleteItemAsync(USER_KEY);
+      clearCachedVirtualAccounts();
+      setDeleteModalVisible(false);
+      setDeleteConfirmText('');
+      setDeletePassword('');
+      navigate && navigate('login');
+    } catch (error) {
+      Alert.alert('Could Not Delete Account', error.message || 'Please check your password and try again.');
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   return (
@@ -109,13 +212,6 @@ export default function Profile({ navigate, user }) {
             <Text style={[styles.profileName, { color: colors.text }]}>{displayName}</Text>
             <Text style={[styles.profileContact, { color: colors.textMuted }]}>{contact}</Text>
           </View>
-          <TouchableOpacity
-            style={styles.editBtn}
-            activeOpacity={0.75}
-            onPress={() => navigate && navigate('edit-profile')}
-          >
-            <Feather name="edit-2" size={14} color={BRAND} />
-          </TouchableOpacity>
         </View>
 
         <Section title="Appearance" colors={colors}>
@@ -136,16 +232,31 @@ export default function Profile({ navigate, user }) {
           />
         </Section>
 
-        <Section title="Account" colors={colors}>
+        <Section title="Security" colors={colors}>
           <Row
-            icon="person-outline"
-            color={BRAND}
+            icon={Platform.OS === 'ios' ? 'scan-outline' : 'finger-print-outline'}
+            color="#4A55DD"
             bg="rgba(74,85,221,0.1)"
-            label="Edit Profile"
+            label={`${BIOMETRIC_LABEL} Login`}
             colors={colors}
-            onPress={() => navigate && navigate('edit-profile')}
+            rightElement={
+              <View style={styles.biometricRight}>
+                {!biometricAvailable ? (
+                  <Text style={[styles.rowValue, { color: colors.textFaint }]}>Unavailable</Text>
+                ) : null}
+                <Switch
+                  value={biometricEnabled}
+                  onValueChange={handleToggleBiometric}
+                  disabled={!biometricAvailable}
+                  trackColor={{ false: '#D6D9EC', true: BRAND }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
+            }
           />
-          <View style={[styles.rowDivider, { backgroundColor: colors.divider }]} />
+        </Section>
+
+        <Section title="Account" colors={colors}>
           <Row
             icon="shield-checkmark-outline"
             color="#10B981"
@@ -244,6 +355,16 @@ export default function Profile({ navigate, user }) {
           />
           <View style={[styles.rowDivider, { backgroundColor: colors.divider }]} />
           <Row icon="log-out-outline" color="#EF4444" bg="rgba(239,68,68,0.1)" label="Log Out" destructive colors={colors} onPress={handleLogout} />
+          <View style={[styles.rowDivider, { backgroundColor: colors.divider }]} />
+          <Row
+            icon="trash-outline"
+            color="#EF4444"
+            bg="rgba(239,68,68,0.1)"
+            label="Delete Account"
+            destructive
+            colors={colors}
+            onPress={() => setDeleteModalVisible(true)}
+          />
         </Section>
       </ScrollView>
 
@@ -254,6 +375,78 @@ export default function Profile({ navigate, user }) {
           navigate && navigate(tab);
         }}
       />
+
+      <Modal
+        visible={deleteModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setDeleteModalVisible(false)}
+      >
+        <View style={styles.overlay}>
+          <Pressable style={styles.overlayTouch} onPress={() => setDeleteModalVisible(false)} />
+          <View style={[styles.sheet, { backgroundColor: colors.card }]}>
+            <View style={[styles.sheetHandle, { backgroundColor: colors.divider }]} />
+            <View style={styles.deleteIconWrap}>
+              <Ionicons name="warning-outline" size={30} color="#EF4444" />
+            </View>
+            <Text style={[styles.sheetTitle, { color: colors.text }]}>Delete Account</Text>
+            <Text style={[styles.deleteWarning, { color: colors.textMuted }]}>
+              This permanently deletes your account and data from Megasub's servers. This cannot be undone.
+            </Text>
+            {!isGoogleAccount && (
+              <>
+                <Text style={[styles.deleteLabel, { color: colors.textMuted }]}>Enter your password</Text>
+                <TextInput
+                  style={[styles.deleteInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+                  placeholder="Password"
+                  placeholderTextColor={colors.textFaint}
+                  secureTextEntry
+                  value={deletePassword}
+                  onChangeText={setDeletePassword}
+                />
+              </>
+            )}
+            <Text style={[styles.deleteLabel, { color: colors.textMuted }]}>Type DELETE to confirm</Text>
+            <TextInput
+              style={[styles.deleteInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+              placeholder="DELETE"
+              placeholderTextColor={colors.textFaint}
+              autoCapitalize="characters"
+              value={deleteConfirmText}
+              onChangeText={setDeleteConfirmText}
+            />
+            <TouchableOpacity
+              style={[
+                styles.deleteBtn,
+                (deleteConfirmText.trim().toUpperCase() !== 'DELETE' ||
+                  (!isGoogleAccount && !deletePassword) ||
+                  deleteLoading) &&
+                  styles.deleteBtnDisabled,
+              ]}
+              activeOpacity={0.85}
+              onPress={handleDeleteAccount}
+              disabled={
+                deleteConfirmText.trim().toUpperCase() !== 'DELETE' ||
+                (!isGoogleAccount && !deletePassword) ||
+                deleteLoading
+              }
+            >
+              <Text style={styles.deleteBtnText}>{deleteLoading ? 'Deleting…' : 'Delete My Account'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              activeOpacity={0.8}
+              onPress={() => {
+                setDeleteModalVisible(false);
+                setDeleteConfirmText('');
+                setDeletePassword('');
+              }}
+            >
+              <Text style={[styles.cancelBtnText, { color: colors.textMuted }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -279,10 +472,6 @@ const styles = StyleSheet.create({
   avatarText: { fontFamily: FONTS.extrabold, fontWeight: '800', fontSize: 20, color: '#FFFFFF', textTransform: 'uppercase' },
   profileName: { fontFamily: FONTS.bold, fontSize: 15.5, marginBottom: 3 },
   profileContact: { fontFamily: FONTS.regular, fontSize: 12.5 },
-  editBtn: {
-    width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(74,85,221,0.08)', borderWidth: 1, borderColor: 'rgba(74,85,221,0.2)',
-  },
 
   section: { marginBottom: 22 },
   sectionTitle: { fontFamily: FONTS.semibold, fontSize: 12.5, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.4 },
@@ -294,4 +483,67 @@ const styles = StyleSheet.create({
   rowLabelDestructive: { color: '#EF4444' },
   rowValue: { fontFamily: FONTS.medium, fontSize: 12, marginRight: 4 },
   rowDivider: { height: 1, marginHorizontal: 10 },
+  biometricRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+
+  overlay: { flex: 1, backgroundColor: 'rgba(11,13,26,0.4)' },
+  overlayTouch: { flex: 1 },
+  sheet: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 10,
+    paddingHorizontal: 24,
+    paddingBottom: 30,
+    alignItems: 'center',
+  },
+  sheetHandle: {
+    width: 40, height: 4, borderRadius: 2,
+    alignSelf: 'center', marginBottom: 18,
+  },
+  deleteIconWrap: {
+    width: 60, height: 60, borderRadius: 30,
+    backgroundColor: 'rgba(239,68,68,0.1)',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 14,
+  },
+  sheetTitle: {
+    fontFamily: FONTS.extrabold,
+    fontWeight: '800',
+    fontSize: 18,
+    marginBottom: 10,
+  },
+  deleteWarning: {
+    fontFamily: FONTS.regular,
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  deleteLabel: {
+    fontFamily: FONTS.semibold,
+    fontSize: 12.5,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  deleteInput: {
+    width: '100%',
+    height: 50,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    paddingHorizontal: 14,
+    fontFamily: FONTS.semibold,
+    fontSize: 14,
+    marginBottom: 18,
+  },
+  deleteBtn: {
+    width: '100%',
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  deleteBtnDisabled: { opacity: 0.5 },
+  deleteBtnText: { fontFamily: FONTS.bold, fontSize: 14, color: '#FFFFFF' },
+  cancelBtn: { paddingVertical: 12 },
+  cancelBtnText: { fontFamily: FONTS.semibold, fontSize: 13.5 },
 });

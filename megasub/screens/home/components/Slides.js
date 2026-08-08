@@ -4,21 +4,23 @@ import {
   Image,
   StyleSheet,
   FlatList,
-  useWindowDimensions,
 } from 'react-native';
+import { useResponsive } from '../../../lib/responsive';
 
-// Reduced padding from 20 to 12 to increase the width and make it look expansive yet fitted
+// Matches WalletCard's wrapper paddingHorizontal so the slide spans the same width
 const PADDING = 16;
 
 const SLIDES = [
-  { id: '1', source: require('../../../assets/GLO 1.png') },
-  { id: '2', source: require('./../../../assets/MTN 1.png') },
-  { id: '3', source: require('../../../assets/AIRTEL 1.png') },
+  { id: '1', source: require('../../../assets/slide-glo.png') },
+  { id: '2', source: require('../../../assets/slide-mtn.png') },
+  { id: '3', source: require('../../../assets/slide-airtel.png') },
 ];
 
 export default function Slide() {
-  const { width: screenWidth } = useWindowDimensions();
-  const carouselWidth = screenWidth - PADDING * 2;
+  // A page must be exactly as wide as the column it sits in, or paging snaps
+  // to the wrong offsets — on a tablet that column is capped, not the screen.
+  const { isTablet, contentWidth } = useResponsive();
+  const carouselWidth = contentWidth - PADDING * 2;
   const [activeIndex, setActiveIndex] = useState(0);
   const flatListRef = useRef(null);
 
@@ -65,11 +67,11 @@ export default function Slide() {
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         renderItem={({ item }) => (
-          <View style={[styles.slideItem, { width: screenWidth }]}>
+          <View style={[styles.slideItem, { width: contentWidth }]}>
             <Image
               source={item.source}
-              style={[styles.image, { width: carouselWidth }]}
-              resizeMode="contain"
+              style={[styles.image, { width: carouselWidth }, isTablet && styles.imageTablet]}
+              resizeMode="cover"
             />
           </View>
         )}
@@ -98,7 +100,7 @@ const styles = StyleSheet.create({
   container: {
     width: '100%',
     alignItems: 'center',
-    marginVertical: 16,
+    marginVertical: 10,
   },
   slideItem: {
     alignItems: 'center',
@@ -106,8 +108,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: PADDING,
   },
   image: {
-    height: 190, // Adjusted slightly upward to match the wider display aspect ratio
-    borderRadius: 10,
+    height: 160, // Matches WalletCard's minHeight so both cards read as the same size
+    borderRadius: 20, // Matches WalletCard's borderRadius
+  },
+  imageTablet: {
+    height: 140, // Matches WalletCard's cardTablet minHeight
   },
   indicatorContainer: {
     flexDirection: 'row',

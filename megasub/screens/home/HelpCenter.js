@@ -8,9 +8,11 @@ import {
   LayoutAnimation,
   Platform,
   UIManager,
+  StatusBar,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../contexts/ThemeContext';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -53,20 +55,21 @@ const FAQS = [
   },
 ];
 
-function FaqItem({ item, expanded, onToggle }) {
+function FaqItem({ item, expanded, onToggle, colors }) {
   return (
     <TouchableOpacity style={styles.faqItem} onPress={onToggle} activeOpacity={0.75}>
       <View style={styles.faqRow}>
-        <Text style={styles.faqQuestion}>{item.question}</Text>
-        <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color="#9CA0B8" />
+        <Text style={[styles.faqQuestion, { color: colors.text }]}>{item.question}</Text>
+        <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textFaint} />
       </View>
-      {expanded && <Text style={styles.faqAnswer}>{item.answer}</Text>}
+      {expanded && <Text style={[styles.faqAnswer, { color: colors.textMuted }]}>{item.answer}</Text>}
     </TouchableOpacity>
   );
 }
 
 export default function HelpCenter({ navigate }) {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
   const [expandedId, setExpandedId] = useState(null);
 
   const handleToggle = (id) => {
@@ -75,26 +78,27 @@ export default function HelpCenter({ navigate }) {
   };
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={colors.statusBarStyle} translucent backgroundColor="transparent" />
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity
-          style={styles.backBtn}
+          style={[styles.backBtn, { backgroundColor: colors.card }]}
           onPress={() => navigate && navigate('profile')}
           activeOpacity={0.7}
         >
-          <Feather name="arrow-left" size={20} color="#0B0D1A" />
+          <Feather name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Help Center</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Help Center</Text>
         <View style={{ width: 38 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Text style={styles.sectionLabel}>Frequently Asked Questions</Text>
-        <View style={styles.listCard}>
+        <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Frequently Asked Questions</Text>
+        <View style={[styles.listCard, { backgroundColor: colors.card }]}>
           {FAQS.map((item, index) => (
             <View key={item.id}>
-              <FaqItem item={item} expanded={expandedId === item.id} onToggle={() => handleToggle(item.id)} />
-              {index < FAQS.length - 1 && <View style={styles.divider} />}
+              <FaqItem item={item} expanded={expandedId === item.id} onToggle={() => handleToggle(item.id)} colors={colors} />
+              {index < FAQS.length - 1 && <View style={[styles.divider, { backgroundColor: colors.divider }]} />}
             </View>
           ))}
         </View>

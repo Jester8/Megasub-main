@@ -4,6 +4,7 @@ import {
   ScrollView,
   StyleSheet,
   StatusBar,
+  RefreshControl,
 } from 'react-native';
 import WelcomeHeader from './components/WelcomeHeader';
 import WalletCard from './components/Walletcard';
@@ -12,14 +13,22 @@ import ServicesGrid from './components/Servicesgrid';
 import RecentTransactions from './components/Recent';
 import BottomNav from './components/BottomNav';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useResponsive } from '../../lib/responsive';
 
-export default function HomeScreen({ navigate, user }) {
+const BRAND = '#4A55DD';
+
+export default function HomeScreen({ navigate, user, onRefreshWallet }) {
   const { colors } = useTheme();
+  const { content } = useResponsive();
   const [activeTab, setActiveTab] = useState('home');
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshSignal, setRefreshSignal] = useState(0);
 
   function handleTopUp() { navigate('topup'); }
 
   function handleSeeAllTransactions() { navigate('history'); }
+
+  function handleSeeAllServices() { navigate('all-services'); }
 
   function handleTabPress(tab) {
     if (tab === 'home') {
@@ -27,6 +36,13 @@ export default function HomeScreen({ navigate, user }) {
       return;
     }
     navigate(tab);
+  }
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    await Promise.resolve(onRefreshWallet && onRefreshWallet());
+    setRefreshSignal((n) => n + 1);
+    setRefreshing(false);
   }
 
   return (
@@ -37,20 +53,23 @@ export default function HomeScreen({ navigate, user }) {
         userName={user?.first_name || user?.username || 'there'}
         userData={user}
         notifCount={0}
-        onNotifPress={() => console.log('notifications')}
+        onNotifPress={() => navigate('notifications')}
       />
 
       {/* Main content body handles screen fitting dynamically */}
       <View style={styles.mainContent}>
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, content]}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={BRAND} />
+          }
         >
           <WalletCard userData={user} onTopUp={handleTopUp} />
           <Slide />
-          <ServicesGrid navigate={navigate} />
-          <RecentTransactions onSeeAllPress={handleSeeAllTransactions} />
+          <ServicesGrid navigate={navigate} onSeeAllPress={handleSeeAllServices} />
+          <RecentTransactions user={user} onSeeAllPress={handleSeeAllTransactions} refreshSignal={refreshSignal} />
         </ScrollView>
       </View>
 

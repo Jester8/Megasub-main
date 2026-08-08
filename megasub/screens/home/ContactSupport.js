@@ -7,9 +7,11 @@ import {
   ScrollView,
   Linking,
   Alert,
+  StatusBar,
 } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const FONTS = {
   regular: 'Manrope_400Regular',
@@ -18,7 +20,12 @@ const FONTS = {
   bold: 'Manrope_700Bold',
 };
 
-const SUPPORT_PHONE = '+2348000000000';
+// Sourced from the Terms and Conditions doc's own Contact Information
+// section (Samuel, 2026-08-04) — the placeholder all-zeros number this
+// replaced is exactly what QA flagged (Screenshot #5). The same number is
+// used for both WhatsApp and Call since the source docs only list one; if
+// there's a separate WhatsApp-specific line, swap it in here.
+const SUPPORT_PHONE = '+2348134745216';
 const SUPPORT_EMAIL = 'support@mega-sub.com';
 
 const CHANNELS = [
@@ -53,6 +60,7 @@ const CHANNELS = [
 
 export default function ContactSupport({ navigate }) {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
 
   const handleOpen = async (channel) => {
     const url = channel.getUrl();
@@ -70,23 +78,24 @@ export default function ContactSupport({ navigate }) {
   };
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={colors.statusBarStyle} translucent backgroundColor="transparent" />
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity
-          style={styles.backBtn}
+          style={[styles.backBtn, { backgroundColor: colors.card }]}
           onPress={() => navigate && navigate('profile')}
           activeOpacity={0.7}
         >
-          <Feather name="arrow-left" size={20} color="#0B0D1A" />
+          <Feather name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Contact Support</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Contact Support</Text>
         <View style={{ width: 38 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Text style={styles.intro}>Choose how you'd like to reach us. Our team is available 8am – 10pm daily.</Text>
+        <Text style={[styles.intro, { color: colors.textMuted }]}>Choose how you'd like to reach us. Our team is available 8am – 10pm daily.</Text>
 
-        <View style={styles.listCard}>
+        <View style={[styles.listCard, { backgroundColor: colors.card }]}>
           {CHANNELS.map((channel, index) => (
             <View key={channel.id}>
               <TouchableOpacity style={styles.row} onPress={() => handleOpen(channel)} activeOpacity={0.75}>
@@ -94,12 +103,12 @@ export default function ContactSupport({ navigate }) {
                   <Ionicons name={channel.icon} size={19} color={channel.color} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.rowLabel}>{channel.label}</Text>
-                  <Text style={styles.rowSub}>{channel.sub}</Text>
+                  <Text style={[styles.rowLabel, { color: colors.text }]}>{channel.label}</Text>
+                  <Text style={[styles.rowSub, { color: colors.textMuted }]}>{channel.sub}</Text>
                 </View>
-                <Feather name="chevron-right" size={18} color="#B7BCEF" />
+                <Feather name="chevron-right" size={18} color={colors.textFaint} />
               </TouchableOpacity>
-              {index < CHANNELS.length - 1 && <View style={styles.divider} />}
+              {index < CHANNELS.length - 1 && <View style={[styles.divider, { backgroundColor: colors.divider }]} />}
             </View>
           ))}
         </View>
