@@ -19,6 +19,7 @@ import {
   validateCableTv,
   buyCableTv,
 } from '../../../lib/api';
+import { requireNetworkOrShowError } from '../../../lib/network';
 import { useTheme } from '../../../contexts/ThemeContext';
 import CategoryTabs from '../components/CategoryTabs';
 import PlanGrid from '../components/PlanGrid';
@@ -190,6 +191,7 @@ export default function Cable({ navigate, user }) {
 
   const handleSubscribe = async () => {
     if (pin.length < 4 || !validatedName) return;
+    if (!(await requireNetworkOrShowError())) return;
 
     setLoading(true);
     try {
@@ -246,7 +248,7 @@ export default function Cable({ navigate, user }) {
           subtitle={`Your ${selectedPackage?.label || ''} subscription on ${selectedProvider?.label || ''} is active.`}
           amount={selectedPackage?.price}
           details={[
-            { label: 'Provider', value: selectedProvider?.label },
+            { label: 'Provider', value: selectedProvider?.label, logo: selectedProvider?.logo },
             { label: 'Package', value: selectedPackage?.label },
             { label: 'Smartcard No.', value: smartcard },
             { label: 'Customer Name', value: validatedName },

@@ -9,7 +9,6 @@ import {
   FlatList,
   StatusBar,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
@@ -56,16 +55,6 @@ function SlideItem({ item }) {
     <View style={[styles.slideContainer, { width }]}>
       <Image source={item.image} style={styles.bgImage} resizeMode="cover" />
       <View style={styles.darkOverlay} />
-      <LinearGradient
-        colors={[
-          'transparent',
-          'rgba(8,10,30,0.55)',
-          'rgba(5,7,22,0.82)',
-          'rgba(3,5,18,0.97)',
-        ]}
-        locations={[0, 0.35, 0.65, 1]}
-        style={styles.gradientScrim}
-      />
       <View style={styles.textContent}>
         {/* <View style={styles.accentPill}>
           <View style={styles.accentDot} />
@@ -149,25 +138,18 @@ export default function OnboardingScreen({ navigate }) {
         <DotIndicator count={slides.length} activeIndex={currentIndex} />
 
         <TouchableOpacity
-          style={styles.nextBtn}
+          style={[styles.nextBtn, styles.nextBtnSolid]}
           onPress={handleNext}
           activeOpacity={0.85}
         >
-          <LinearGradient
-            colors={[COLORS.primary, COLORS.primaryDark]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.nextBtnGradient}
-          >
-            <Text style={styles.nextBtnText}>
-              {isLastSlide ? 'Get Started' : 'Next'}
-            </Text>
-            {/* {!isLastSlide && (
-              <View style={styles.arrowCircle}>
-                <Text style={styles.arrowText}>→</Text>
-              </View>
-            )} */}
-          </LinearGradient>
+          <Text style={styles.nextBtnText}>
+            {isLastSlide ? 'Get Started' : 'Next'}
+          </Text>
+          {/* {!isLastSlide && (
+            <View style={styles.arrowCircle}>
+              <Text style={styles.arrowText}>→</Text>
+            </View>
+          )} */}
         </TouchableOpacity>
       </View>
     </View>
@@ -185,12 +167,12 @@ const styles = StyleSheet.create({
   skipText: { fontFamily: FONTS.semibold, fontSize: 13, color: COLORS.whiteAlpha80 },
   slideContainer: { height, position: 'relative' },
   bgImage: { position: 'absolute', top: 0, left: 0, width, height },
+  // Flat scrim replacing the old gradient — a bit darker than before (0.45 →
+  // 0.58) to keep the title/subtitle readable without the gradient's extra
+  // darkening toward the bottom of the image.
   darkOverlay: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
-  gradientScrim: {
-    position: 'absolute', top: height * 0.3, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.58)',
   },
   textContent: { position: 'absolute', bottom: 148, left: 28, right: 28 },
   accentPill: {
@@ -219,8 +201,9 @@ const styles = StyleSheet.create({
     borderRadius: 50, overflow: 'hidden', elevation: 8,
     shadowColor: COLORS.primaryDark,
     shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.55, shadowRadius: 14,
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 28, paddingVertical: 15, gap: 10,
   },
-  nextBtnGradient: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 28, paddingVertical: 15, gap: 10 },
+  nextBtnSolid: { backgroundColor: COLORS.primary },
   nextBtnText: { fontFamily: FONTS.bold, fontSize: 15, color: COLORS.white },
   arrowCircle: {
     width: 22, height: 22, borderRadius: 11,

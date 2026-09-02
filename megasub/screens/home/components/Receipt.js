@@ -48,7 +48,10 @@ const Receipt = forwardRef(function Receipt(
               ]}
             >
               <Text style={[styles.rowLabel, { color: colors.textMuted }]}>{row.label}</Text>
-              <Text style={[styles.rowValue, { color: colors.text }]} numberOfLines={1}>{row.value}</Text>
+              <View style={styles.rowValueWrap}>
+                {row.logo ? <Image source={row.logo} style={styles.rowLogo} /> : null}
+                <Text style={[styles.rowValue, { color: colors.text }]} numberOfLines={1}>{row.value}</Text>
+              </View>
             </View>
           ))}
         </View>
@@ -90,6 +93,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, gap: 12 },
   rowDivider: { borderBottomWidth: 1 },
   rowLabel: { fontFamily: FONTS.medium, fontSize: 13 },
+  rowValueWrap: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
+  rowLogo: { width: 18, height: 18, borderRadius: 9 },
   rowValue: { fontFamily: FONTS.semibold, fontSize: 13.5, flexShrink: 1, textAlign: 'right' },
 
   footer: { alignItems: 'center', marginTop: 24, paddingTop: 18, borderTopWidth: 1, width: '100%' },

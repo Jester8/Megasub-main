@@ -51,6 +51,71 @@ export function clearCachedVirtualAccounts() {
   cachedVirtualAccounts = null;
 }
 
+// Tracks which step of signup an account has actually reached, independent
+// of USER_KEY/SESSION_KEY — those two get written to SecureStore the moment
+// Register succeeds, before email verification, phone verification, or PIN
+// setup happen. Without this, killing the app mid-signup (Samuel's "phone
+// dies during registration" case) left bootstrap() seeing a session + user
+// record and routing straight to Home, skipping every remaining step — a
+// real bypass, not just a UX gap. App.js's bootstrap() checks this before
+// trusting a saved session; each signup screen advances it on success, and
+// it's cleared the moment PIN setup actually completes.
+const SIGNUP_STEP_KEY = 'megasub_signup_step';
+
+export function setSignupStep(step) {
+  return SecureStore.setItemAsync(SIGNUP_STEP_KEY, step);
+}
+
+export function getSignupStep() {
+  return SecureStore.getItemAsync(SIGNUP_STEP_KEY);
+}
+
+export function clearSignupStep() {
+  return SecureStore.deleteItemAsync(SIGNUP_STEP_KEY).catch(() => {});
+}
+
+// Per-account record of whether phone verification and PIN setup are done,
+// keyed by user id — separate from USER_KEY, which is a single slot holding
+// only whichever account is CURRENTLY signed in. Without this, signing out
+// of account A and into account B checked "is setup complete" against A's
+// leftover cached record (USER_KEY still held A's data at that point), which
+// never matched B's id/email/username/phone — so a fully set-up account B
+// got routed through phone verification again on every account switch on
+// the same device. User id is the one identifier that's always present and
+// never changes, unlike email/username/phone which login.jsx also accepts
+// as the typed identifier.
+const ACCOUNT_SETUP_KEY = 'megasub_account_setup_by_id';
+
+export async function getAccountSetupStatus(userId) {
+  if (!userId) return null;
+  try {
+    const raw = await SecureStore.getItemAsync(ACCOUNT_SETUP_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    return map[userId] || null;
+  } catch {
+    return null;
+  }
+}
+
+// Merges rather than overwrites — a phone-verification write must not erase
+// a pin_set flag saved moments earlier by a different step, and vice versa.
+export async function saveAccountSetupStatus(userId, { phone_number, pin_set } = {}) {
+  if (!userId) return;
+  try {
+    const raw = await SecureStore.getItemAsync(ACCOUNT_SETUP_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    const existing = map[userId] || {};
+    map[userId] = {
+      phone_number: phone_number ?? existing.phone_number ?? '',
+      pin_set: pin_set ?? existing.pin_set ?? false,
+    };
+    await SecureStore.setItemAsync(ACCOUNT_SETUP_KEY, JSON.stringify(map));
+  } catch {
+    // Best-effort — worst case this account re-verifies on its next switch,
+    // same behavior as before this fix existed.
+  }
+}
+
 // This API always responds with HTTP 200 and signals success/failure through
 // the JSON `status` field, so response.ok alone can't be trusted.
 async function request(path, { method = 'GET', body, params } = {}) {
@@ -58,15 +123,30 @@ async function request(path, { method = 'GET', body, params } = {}) {
 
   const url = `${BASE_URL}/${path}${buildQuery(params)}`;
 
-  const response = await fetch(url, {
-    method,
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      method,
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (err) {
+    // fetch() itself throwing (no route to the server, DNS failure, timeout)
+    // is categorically different from the server responding with an error —
+    // it means this device currently has no way to reach Megasub at all.
+    // Flagged so callers (and the global network modal) can tell "you're
+    // offline" apart from "the server rejected this," which the old raw
+    // "Network request failed" message never let anyone distinguish.
+    console.log(`❌ Network error on ${path}`, err?.message);
+    const error = new Error("Could not connect to Megasub's servers. Check your connection and try again.");
+    error.isNetworkError = true;
+    error.cause = err;
+    throw error;
+  }
 
   const json = await response.json().catch(() => ({}));
 

@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { requestEmailVerification, confirmEmailVerification } from '../lib/api';
+import { requestEmailVerification, confirmEmailVerification, setSignupStep } from '../lib/api';
 
 const COLORS = {
   primary: '#4A55DD',
@@ -75,6 +75,9 @@ export default function EmailVerify({ navigate, user }) {
     setLoading(true);
     try {
       await confirmEmailVerification({ userId, otp });
+      // Email confirmed — a resume after this point should land on phone
+      // verification/PIN setup, not back at email entry.
+      await setSignupStep('verify');
       navigate && navigate('verify', user);
     } catch (error) {
       Alert.alert('Verification Failed', error.message || 'That code was not accepted. Please try again.');

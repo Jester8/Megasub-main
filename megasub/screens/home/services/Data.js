@@ -14,6 +14,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchNetworks, fetchProductPlanCategories, fetchProductPlans, buyData } from '../../../lib/api';
+import { requireNetworkOrShowError } from '../../../lib/network';
 import { useTheme } from '../../../contexts/ThemeContext';
 import CategoryTabs from '../components/CategoryTabs';
 import PlanGrid from '../components/PlanGrid';
@@ -134,6 +135,7 @@ export default function Data({ navigate, user }) {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [phone, setPhone] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [contactPickerVisible, setContactPickerVisible] = useState(false);
 
   const [pin, setPin] = useState('');
@@ -212,6 +214,7 @@ export default function Data({ navigate, user }) {
 
   const handleBuyData = async () => {
     if (pin.length < 4) return;
+    if (!(await requireNetworkOrShowError())) return;
 
     setLoading(true);
     try {
@@ -273,9 +276,12 @@ export default function Data({ navigate, user }) {
           subtitle={`Your ${selectedPlan?.product_plan_name || 'data'} plan on ${selectedNetwork?.network_name || ''} was activated.`}
           amount={selectedPlan?.selling_price}
           details={[
-            { label: 'Network', value: selectedNetwork?.network_name },
+            { label: 'Network', value: selectedNetwork?.network_name, logo: NETWORK_LOGOS[selectedNetwork?.network_name?.toUpperCase()] },
             { label: 'Recipient', value: phone },
             { label: 'Plan', value: selectedPlan?.product_plan_name },
+            ...(appliedCoupon
+              ? [{ label: `Coupon (${appliedCoupon.code})`, value: `-₦${formatNaira(appliedCoupon.amount)}` }]
+              : []),
           ].filter((d) => d.value)}
           onDone={() => navigate && navigate('home')}
           colors={colors}
@@ -345,7 +351,7 @@ export default function Data({ navigate, user }) {
             <Text style={styles.phoneErrorText}>Enter a valid 11-digit phone number</Text>
           )}
 
-          <CouponCheck userId={user?.id} colors={colors} productSlug="data" />
+          <CouponCheck userId={user?.id} colors={colors} productSlug="data" onApplied={setAppliedCoupon} />
 
           {selectedNetwork ? (
             <>
@@ -419,9 +425,23 @@ export default function Data({ navigate, user }) {
               <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Plan</Text>
               <Text style={[styles.summaryValue, { color: colors.text }]}>{selectedPlan?.product_plan_name}</Text>
             </View>
+            {appliedCoupon ? (
+              <>
+                <View style={styles.summaryRow}>
+                  <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Amount</Text>
+                  <Text style={[styles.summaryValue, { color: colors.text }]}>₦{formatNaira(selectedPlan?.selling_price)}</Text>
+                </View>
+                <View style={styles.summaryRow}>
+                  <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Coupon ({appliedCoupon.code})</Text>
+                  <Text style={[styles.summaryValue, { color: '#16A34A' }]}>-₦{formatNaira(appliedCoupon.amount)}</Text>
+                </View>
+              </>
+            ) : null}
             <View style={styles.summaryRow}>
               <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Total Cost</Text>
-              <Text style={[styles.summaryValue, { color: BRAND, fontFamily: FONTS.bold }]}>₦{formatNaira(selectedPlan?.selling_price)}</Text>
+              <Text style={[styles.summaryValue, { color: BRAND, fontFamily: FONTS.bold }]}>
+                ₦{formatNaira(appliedCoupon ? Math.max(0, Number(selectedPlan?.selling_price || 0) - appliedCoupon.amount) : selectedPlan?.selling_price)}
+              </Text>
             </View>
           </View>
 
@@ -453,7 +473,9 @@ export default function Data({ navigate, user }) {
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
                 <>
-                  <Text style={styles.continueText}>Pay ₦{formatNaira(selectedPlan?.selling_price)}</Text>
+                  <Text style={styles.continueText}>
+                    Pay ₦{formatNaira(appliedCoupon ? Math.max(0, Number(selectedPlan?.selling_price || 0) - appliedCoupon.amount) : selectedPlan?.selling_price)}
+                  </Text>
                   <Feather name="shield" size={18} color="#FFFFFF" />
                 </>
               )}

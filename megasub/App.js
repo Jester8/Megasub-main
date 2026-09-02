@@ -4,7 +4,11 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
-import { fetchDashboard, setUnauthorizedHandler, resetUnauthorizedGuard, clearCachedVirtualAccounts } from './lib/api';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
+import { fetchDashboard, setUnauthorizedHandler, resetUnauthorizedGuard, clearCachedVirtualAccounts, getSignupStep } from './lib/api';
+import { queryClient, asyncStoragePersister, CACHE_BUSTER, CACHE_MAX_AGE } from './lib/queryClient';
+import { warmAppData } from './lib/warmup';
+import NetworkErrorModal from './screens/home/components/NetworkErrorModal';
 import { ThemeProvider } from './contexts/ThemeContext';
 import OnboardingScreen from './screens/splash';
 import SignupScreen from './screens/signup';
@@ -108,20 +112,36 @@ export default function App() {
 
   async function bootstrap() {
     try {
-      const [sessionToken, userData, onboardingSeen] = await Promise.all([
+      const [sessionToken, userData, onboardingSeen, signupStep] = await Promise.all([
         SecureStore.getItemAsync(SESSION_KEY),
         SecureStore.getItemAsync(USER_KEY),
         SecureStore.getItemAsync(ONBOARDING_KEY),
+        getSignupStep(),
       ]);
 
       if (sessionToken && userData) {
         resetUnauthorizedGuard();
-        // Verification is a one-time, signup-only step (with its own Skip
-        // button) — a saved session always resumes straight to Home, unless
-        // the user opted into biometric app-lock, in which case that gate
-        // comes first.
-        setUser(JSON.parse(userData));
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
 
+        // signup.jsx/login.jsx/googleAuth.js write SESSION_KEY + USER_KEY the
+        // moment an account exists server-side — before email verification,
+        // phone verification, or PIN setup actually finish. Without this
+        // check, killing the app mid-signup left bootstrap() seeing a
+        // "valid" session and routing straight to Home, skipping every
+        // remaining step. signupStep is only set while onboarding is
+        // incomplete and cleared the moment it truly finishes, so trust it
+        // over the mere presence of a session/user record.
+        if (signupStep === 'email-verify' || signupStep === 'verify') {
+          console.log(`⚠️ Signup incomplete (${signupStep}) — resuming instead of Home`);
+          setScreen(signupStep);
+          return;
+        }
+
+        // Verification is a one-time, signup-only step (with its own Skip
+        // button) — a saved, completed session resumes straight to Home,
+        // unless the user opted into biometric app-lock, in which case that
+        // gate comes first.
         const biometricEnabled = await SecureStore.getItemAsync(BIOMETRIC_KEY);
         if (biometricEnabled === 'true') {
           const hasHardware = await LocalAuthentication.hasHardwareAsync();
@@ -136,6 +156,7 @@ export default function App() {
         console.log('✅ Saved session found, going straight to home');
         setScreen('home');
         refreshWallet();
+        warmAppData(parsedUser?.id);
       } else if (onboardingSeen) {
         setScreen('login');
       } else {
@@ -263,6 +284,14 @@ function navigate(s, userData) {
   if (s === 'home' || s === 'wallet') {
     refreshWallet();
   }
+
+  // Landing on Home right after login/signup is also the moment to warm the
+  // rest of the app's data in the background (see lib/warmup.js), so the
+  // user can keep browsing on a bad connection without hitting a raw
+  // network error the first time they open Wallet/Services/History.
+  if (s === 'home') {
+    warmAppData(actualUserData?.id || user?.id);
+  }
 }
 
   let content = null;
@@ -271,7 +300,7 @@ function navigate(s, userData) {
   if (screen === 'login')      content = <LoginScreen navigate={navigate} />;
   if (screen === 'unlock')     content = (
     <UnlockScreen
-      onUnlocked={() => { setScreen('home'); refreshWallet(); }}
+      onUnlocked={() => { setScreen('home'); refreshWallet(); warmAppData(user?.id); }}
       onUsePassword={handleUsePasswordInstead}
     />
   );
@@ -307,15 +336,25 @@ function navigate(s, userData) {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <ThemeProvider>
-          {screen === null ? (
-            <View style={styles.bootLoader}>
-              <ActivityIndicator color="#4A55DD" size="large" />
-            </View>
-          ) : (
-            content
-          )}
-        </ThemeProvider>
+        <PersistQueryClientProvider
+          client={queryClient}
+          persistOptions={{
+            persister: asyncStoragePersister,
+            maxAge: CACHE_MAX_AGE,
+            buster: CACHE_BUSTER,
+          }}
+        >
+          <ThemeProvider>
+            {screen === null ? (
+              <View style={styles.bootLoader}>
+                <ActivityIndicator color="#4A55DD" size="large" />
+              </View>
+            ) : (
+              content
+            )}
+            <NetworkErrorModal />
+          </ThemeProvider>
+        </PersistQueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

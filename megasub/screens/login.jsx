@@ -18,7 +18,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useResponsive } from '../lib/responsive';
-import { resetUnauthorizedGuard } from '../lib/api';
+import {
+  resetUnauthorizedGuard,
+  clearSignupStep,
+  getAccountSetupStatus,
+  saveAccountSetupStatus,
+} from '../lib/api';
 import { signInWithGoogle, isGoogleSignInCancelled } from '../lib/googleAuth';
 
 // Synchronized production API endpoint URL mapping
@@ -310,9 +315,13 @@ export default function LoginScreen({ navigate }) {
       // Phone number and PIN status have no dedicated "check" endpoint (the
       // phone-verification API isn't live, and PIN status is purely local)
       // — fall back to what this same device already knows rather than
-      // re-asking every login. Match on id first (most reliable), falling
-      // back to whichever of email/username/phone matches what was typed —
-      // identifier can now be any of the three, not just an email.
+      // re-asking every login. previousLocal only helps when THIS account is
+      // still the one sitting in the single-slot USER_KEY cache — switching
+      // to a different account (sign out of A, sign into B) leaves A's data
+      // there, which never matches B's id/email/username/phone. The
+      // per-account map keyed by id is what actually survives an account
+      // switch, so it takes priority; previousLocal is kept only as a
+      // fallback for accounts that predate this map existing.
       const identifierLower = typedIdentifier.toLowerCase();
       let previousLocal = {};
       try {
@@ -327,6 +336,8 @@ export default function LoginScreen({ navigate }) {
           if (sameAccount) previousLocal = prev;
         }
       } catch {}
+
+      const accountSetup = (await getAccountSetupStatus(userId)) || {};
 
       // The typed identifier only belongs in the email field if it actually
       // looks like one — a phone number or username typed at login must not
@@ -347,34 +358,27 @@ export default function LoginScreen({ navigate }) {
           profile.username ||
           (identifierIsEmail ? typedIdentifier.split('@')[0] : typedIdentifier),
         last_name: profile.last_name || previousLocal.last_name || '',
-        phone_number: profile.phone_number || previousLocal.phone_number || '',
-        pin_set: profile.pin_set ?? previousLocal.pin_set ?? false,
+        phone_number: profile.phone_number || accountSetup.phone_number || previousLocal.phone_number || '',
+        pin_set: profile.pin_set ?? accountSetup.pin_set ?? previousLocal.pin_set ?? false,
       };
+
+      // Keep the per-account map current for this id regardless of which
+      // branch supplied the values above, so a third account switch later
+      // still finds it.
+      saveAccountSetupStatus(userId, { phone_number: userData.phone_number, pin_set: userData.pin_set });
 
       // Cache elements inside local SecureStore
       await SecureStore.setItemAsync(SESSION_KEY, token);
       await SecureStore.setItemAsync(USER_KEY, JSON.stringify(userData));
       resetUnauthorizedGuard();
 
-      // The backend exposes no way to read whether a phone number is on
-      // file for THIS endpoint, so the fallback signal is local memory of
-      // this device: no phone + no PIN evidence means setup never completed
-      // (or this is a fresh device/reinstall — SecureStore doesn't survive
-      // either). If /login or /dashboard ever start returning a
-      // phone_verification flag on profile.user (the /google endpoint
-      // already does), trust that over local memory — it's authoritative
-      // and correctly covers a fresh install where previousLocal is empty.
-      const serverVerified = profile.phone_verification === true || profile.phone_verification === 1;
-      const setupComplete = serverVerified
-        ? !!userData.pin_set
-        : !!(userData.phone_number && userData.pin_set);
-      if (!setupComplete) {
-        console.log('ℹ️ No phone/PIN on record — routing through verification.');
-        navigate && navigate('verify', userData);
-        return;
-      }
-
+      // A successful login with valid credentials is itself proof this
+      // account already exists and finished setup server-side — phone/PIN
+      // collection belongs to the signup flow only. Login must never
+      // re-run it, regardless of what this device does or doesn't
+      // remember locally (fresh install, reinstall, new device, etc.).
       console.log('✅ Login successful! Moving to dashboard home screen.');
+      await clearSignupStep();
       navigate && navigate('home', userData);
       
     } catch (err) {
@@ -388,14 +392,14 @@ export default function LoginScreen({ navigate }) {
   async function handleGoogle() {
     setGoogleLoading(true);
     try {
-      const { userData, requiresPhoneVerification } = await signInWithGoogle({
+      const { userData, requiresPhoneVerification, isNewUser } = await signInWithGoogle({
         deviceName: Platform.OS === 'ios' ? 'iOS Device' : 'Android Device',
       });
-      // The backend decides new-vs-returning from this one call — an
-      // existing user with phone_verification already on file goes
-      // straight to Home, a brand-new (or unverified) one goes through the
-      // same verify flow email signup uses.
-      navigate && navigate(requiresPhoneVerification ? 'verify' : 'home', userData);
+      // This is the Login screen — an account signing in here already
+      // exists, full stop. Only a Google sign-in that just created a brand
+      // new account (isNewUser) still needs the one-time phone/PIN setup;
+      // every returning account goes straight to Home.
+      navigate && navigate(isNewUser && requiresPhoneVerification ? 'verify' : 'home', userData);
     } catch (err) {
       if (isGoogleSignInCancelled(err)) return;
       Alert.alert('Google Sign-In Failed', err.message || 'Please try again.');

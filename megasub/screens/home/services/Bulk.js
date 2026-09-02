@@ -14,6 +14,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchNetworks, fetchProductPlanCategories, fetchProductPlans, buyAirtime } from '../../../lib/api';
+import { requireNetworkOrShowError } from '../../../lib/network';
 import { useTheme } from '../../../contexts/ThemeContext';
 import CategoryTabs from '../components/CategoryTabs';
 import PlanGrid from '../components/PlanGrid';
@@ -237,6 +238,7 @@ export default function Bulk({ navigate, user }) {
 
   const handleBuyBulk = async () => {
     if (pin.length < 4) return;
+    if (!(await requireNetworkOrShowError())) return;
 
     setLoading(true);
     try {
@@ -297,7 +299,7 @@ export default function Bulk({ navigate, user }) {
           subtitle={`Airtime was sent to ${recipients.length} recipient${recipients.length === 1 ? '' : 's'}.`}
           amount={totalCost}
           details={[
-            { label: 'Network', value: selectedNetwork?.network_name },
+            { label: 'Network', value: selectedNetwork?.network_name, logo: NETWORK_LOGOS[selectedNetwork?.network_name?.toUpperCase()] },
             { label: 'Recipients', value: String(recipients.length) },
             { label: 'Amount Each', value: `₦${formatNaira(amount)}` },
           ].filter((d) => d.value)}

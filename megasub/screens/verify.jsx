@@ -28,6 +28,8 @@ import {
   generateNairaVirtualAccount,
   pickFundingOption,
   resolveGenerationBank,
+  clearSignupStep,
+  saveAccountSetupStatus,
 } from '../lib/api';
 
 const { width, height } = Dimensions.get('window');
@@ -175,7 +177,11 @@ export default function VerifyScreen({ navigate, user }) {
   const [otp, setOtp] = useState('');
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
-  const [step, setStep] = useState('phone');
+  // A phone number already on file (from a previous verification, echoed
+  // back by /login or /dashboard) means this account cleared that step
+  // already — starting back at 'phone' would force re-entry/re-OTP for
+  // no reason. Only PIN is still outstanding in that case.
+  const [step, setStep] = useState(phone_number ? 'pin' : 'phone');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [userToken, setUserToken] = useState(token);
@@ -239,6 +245,11 @@ export default function VerifyScreen({ navigate, user }) {
 
     setSavedUserData(updatedUser);
     await SecureStore.setItemAsync(USER_KEY, JSON.stringify(updatedUser));
+    // Recorded per-account (keyed by id), not just in the single-slot
+    // USER_KEY — otherwise this is invisible to login.jsx/googleAuth.js the
+    // next time a DIFFERENT account is signed into on this device, since
+    // that overwrites USER_KEY with the other account's data.
+    saveAccountSetupStatus(userIdState, { phone_number: phoneNumber.trim() });
 
     // Phone is linked, but the account has no transaction PIN yet — that's
     // required before any purchase can go through, so it's the next
@@ -335,6 +346,12 @@ export default function VerifyScreen({ navigate, user }) {
       const updatedUser = { ...savedUserData, pin_set: true };
       setSavedUserData(updatedUser);
       await SecureStore.setItemAsync(USER_KEY, JSON.stringify(updatedUser));
+      // Same per-account reasoning as finishPhoneVerified() above — this
+      // must survive a later switch to a different account on this device.
+      saveAccountSetupStatus(userIdState, { pin_set: true });
+      // Onboarding is genuinely complete now — a resumed session should go
+      // straight to Home from here on, not back through this flow.
+      await clearSignupStep();
 
       // The PIN the generate call needs only exists at this exact point in
       // the app — at login there is nothing but an email and a password — so

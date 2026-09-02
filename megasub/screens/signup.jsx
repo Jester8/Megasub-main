@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import { useResponsive } from '../lib/responsive';
 import { signInWithGoogle, isGoogleSignInCancelled } from '../lib/googleAuth';
+import { setSignupStep } from '../lib/api';
 import TermsModal from './home/components/TermsModal';
 
 const BASE_URL = 'https://mega-sub.com/api/v1/external';
@@ -300,6 +301,11 @@ export default function SignupScreen({ navigate }) {
       // ✅ Save user data to SecureStore immediately
       await SecureStore.setItemAsync(SESSION_KEY, token);
       await SecureStore.setItemAsync(USER_KEY, JSON.stringify(userData));
+      // Account exists server-side now but hasn't finished onboarding —
+      // bootstrap() checks this before trusting the session above, so a
+      // crash/kill here resumes at email verification instead of skipping
+      // straight to Home on next launch.
+      await setSignupStep('email-verify');
 
       // ✅ Navigate with FULL user data — email must be confirmed first
       // (register() auto-sends the 6-digit code and creates the account as
@@ -318,19 +324,31 @@ export default function SignupScreen({ navigate }) {
   async function handleGoogle() {
     // Google sign-in can create a brand-new account (tnc:true is always
     // sent), so it needs the same consent this screen already requires for
-    // email signup before it's allowed to proceed.
+    // email signup before it's allowed to proceed. The Google button sits
+    // in the fixed header above the fold, while the checkbox is further
+    // down the form — silently setting an inline error here left the
+    // button looking like it just didn't work, since the error text was
+    // never in view. An Alert makes the block impossible to miss.
     if (!agreed) {
       setErrors((prev) => ({ ...prev, agreed: 'You must agree to the Terms and Conditions' }));
+      Alert.alert(
+        'Agree to Continue',
+        'Please check "I have read the Terms and Conditions" below before continuing with Google.'
+      );
       return;
     }
 
     setGoogleLoading(true);
     try {
-      const { userData, requiresPhoneVerification } = await signInWithGoogle({
+      const { userData, requiresPhoneVerification, isNewUser } = await signInWithGoogle({
         deviceName: Platform.OS === 'ios' ? 'iOS Device' : 'Android Device',
         referralCode: referral.trim(),
       });
-      navigate && navigate(requiresPhoneVerification ? 'verify' : 'home', userData);
+      // Tapping Google here can still resolve to an account that already
+      // exists (same backend call login uses) — that account goes straight
+      // to Home too. Only an account just created by this call still needs
+      // the one-time phone/PIN setup.
+      navigate && navigate(isNewUser && requiresPhoneVerification ? 'verify' : 'home', userData);
     } catch (err) {
       if (isGoogleSignInCancelled(err)) return;
       Alert.alert('Google Sign-In Failed', err.message || 'Please try again.');

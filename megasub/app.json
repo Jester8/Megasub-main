@@ -2,7 +2,7 @@
   "expo": {
     "name": "megasub",
     "slug": "megasub",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/megasubmain.png",
     "userInterfaceStyle": "light",
@@ -30,6 +30,9 @@
     },
     "web": {
       "favicon": "./assets/megasubmain.png"
+    },
+    "updates": {
+      "enabled": false
     },
     "plugins": [
       "expo-font",
@@ -61,11 +64,11 @@
         }
       ]
     ],
-    "owner": "kalex235",
     "extra": {
       "eas": {
         "projectId": "fc4f4a94-3f72-4021-affe-9420f8230609"
       }
-    }
+    },
+    "owner": "kalex235"
   }
 }

@@ -8,6 +8,16 @@ import ShareButtons from './ShareButtons';
 import { CATEGORY_STYLE, DEFAULT_STYLE, STATUS_LABELS, formatDate } from '../../../lib/transactionMeta';
 import { detectNetworkFromPhone } from '../../../lib/networkDetect';
 
+// Same logos Airtime/Data/Bulk already show on their own confirm/success
+// screens — duplicated here rather than shared since each of those files
+// already keeps its own local copy.
+const NETWORK_LOGOS = {
+  MTN: require('../../../assets/networks/mtn.png'),
+  AIRTEL: require('../../../assets/networks/airtel.png'),
+  GLO: require('../../../assets/networks/glo.png'),
+  '9MOBILE': require('../../../assets/networks/9mobile.png'),
+};
+
 const FONTS = {
   semibold: 'Manrope_600SemiBold',
   bold: 'Manrope_700Bold',
@@ -58,11 +68,15 @@ export default function ReceiptModal({ visible, transaction, onClose, colors }) 
   const rows = [
     { label: 'Type', value: category },
     ...(recipient ? [{ label: 'Recipient', value: recipient }] : []),
-    ...(network ? [{ label: 'Network', value: network }] : []),
+    ...(network ? [{ label: 'Network', value: network, logo: NETWORK_LOGOS[network] }] : []),
+    // Server doesn't return which coupon (if any) was used on a past
+    // transaction, only the resulting discount — "Discount" covers both a
+    // coupon and a network-side bonus honestly, where "Bonus" specifically
+    // would mislabel a coupon-discounted purchase.
     ...(bonus > 0
       ? [
           { label: 'Amount Paid', value: `₦${charged.toLocaleString()}` },
-          { label: 'Bonus', value: `₦${bonus.toLocaleString()}` },
+          { label: 'Discount', value: `₦${bonus.toLocaleString()}` },
         ]
       : []),
     { label: 'Status', value: statusLabel },

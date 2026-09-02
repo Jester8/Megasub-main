@@ -25,6 +25,7 @@ import {
   resolveGenerationBank,
   getCachedVirtualAccounts,
   setCachedVirtualAccounts,
+  saveAccountSetupStatus,
 } from '../../lib/api';
 
 const FONTS = {
@@ -302,6 +303,10 @@ export default function TopUp({ navigate, user }) {
           })
         );
       } catch {}
+      // Same per-account reasoning as verify.jsx's finishPhoneVerified() —
+      // USER_KEY alone won't be found by login.jsx/googleAuth.js once a
+      // different account is signed into on this device.
+      saveAccountSetupStatus(user?.id, { phone_number: linkedPhone.phoneNumber });
 
       let json;
       try {

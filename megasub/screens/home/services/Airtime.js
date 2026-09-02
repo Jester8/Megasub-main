@@ -14,6 +14,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchNetworks, fetchProductPlanCategories, fetchProductPlans, buyAirtime } from '../../../lib/api';
+import { requireNetworkOrShowError } from '../../../lib/network';
 import { useTheme } from '../../../contexts/ThemeContext';
 import CategoryTabs from '../components/CategoryTabs';
 import PlanGrid from '../components/PlanGrid';
@@ -143,6 +144,7 @@ export default function Airtime({ navigate, user }) {
   const [phone, setPhone] = useState('');
   const [contactPickerVisible, setContactPickerVisible] = useState(false);
   const [amount, setAmount] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
 
   // Auth States
   const [pin, setPin] = useState('');
@@ -233,6 +235,7 @@ export default function Airtime({ navigate, user }) {
 
   const handleBuyAirtime = async () => {
     if (pin.length < 4) return;
+    if (!(await requireNetworkOrShowError())) return;
 
     setLoading(true);
     try {
@@ -310,9 +313,12 @@ export default function Airtime({ navigate, user }) {
               subtitle={`Your ${selectedNetwork?.network_name || ''} recharge was successful.`}
               amount={faceValue}
               details={[
-                { label: 'Network', value: selectedNetwork?.network_name },
+                { label: 'Network', value: selectedNetwork?.network_name, logo: NETWORK_LOGOS[selectedNetwork?.network_name?.toUpperCase()] },
                 { label: 'Recipient', value: phone },
                 { label: 'Recharge Type', value: selectedCategory?.product_plan_category_name },
+                ...(appliedCoupon
+                  ? [{ label: `Coupon (${appliedCoupon.code})`, value: `-₦${formatNaira(appliedCoupon.amount)}` }]
+                  : []),
                 ...(bonus > 0
                   ? [
                       { label: 'Amount Paid', value: `₦${charged.toLocaleString()}` },
@@ -410,7 +416,7 @@ export default function Airtime({ navigate, user }) {
             <Text style={styles.phoneErrorText}>Enter a valid 11-digit phone number</Text>
           )}
 
-          <CouponCheck userId={user?.id} colors={colors} productSlug="airtime" />
+          <CouponCheck userId={user?.id} colors={colors} productSlug="airtime" onApplied={setAppliedCoupon} />
 
           <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Amount</Text>
           <View style={[styles.inputCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -461,9 +467,23 @@ export default function Airtime({ navigate, user }) {
                 <Text style={[styles.summaryValue, { color: colors.text }]}>{selectedCategory.product_plan_category_name}</Text>
               </View>
             ) : null}
+            {appliedCoupon ? (
+              <>
+                <View style={styles.summaryRow}>
+                  <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Amount</Text>
+                  <Text style={[styles.summaryValue, { color: colors.text }]}>₦{formatNaira(amount)}</Text>
+                </View>
+                <View style={styles.summaryRow}>
+                  <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Coupon ({appliedCoupon.code})</Text>
+                  <Text style={[styles.summaryValue, { color: '#16A34A' }]}>-₦{formatNaira(appliedCoupon.amount)}</Text>
+                </View>
+              </>
+            ) : null}
             <View style={styles.summaryRow}>
               <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Total Cost</Text>
-              <Text style={[styles.summaryValue, { color: BRAND, fontFamily: FONTS.bold }]}>₦{formatNaira(amount)}</Text>
+              <Text style={[styles.summaryValue, { color: BRAND, fontFamily: FONTS.bold }]}>
+                ₦{formatNaira(appliedCoupon ? Math.max(0, Number(amount) - appliedCoupon.amount) : amount)}
+              </Text>
             </View>
           </View>
 
@@ -496,7 +516,9 @@ export default function Airtime({ navigate, user }) {
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
                 <>
-                  <Text style={styles.continueText}>Pay ₦{formatNaira(amount)}</Text>
+                  <Text style={styles.continueText}>
+                    Pay ₦{formatNaira(appliedCoupon ? Math.max(0, Number(amount) - appliedCoupon.amount) : amount)}
+                  </Text>
                   <Feather name="shield" size={18} color="#FFFFFF" />
                 </>
               )}

@@ -17,7 +17,7 @@ const BRAND = '#4A55DD';
 // via each transaction's own discounted_amount — there's no field to submit
 // a coupon_code into buy_airtime/buy_data. So this is purely an upfront
 // "will I get a discount" check, not something that changes the payload.
-export default function CouponCheck({ userId, colors, productSlug }) {
+export default function CouponCheck({ userId, colors, productSlug, onApplied }) {
   const [code, setCode] = useState('');
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState(null);
@@ -50,14 +50,19 @@ export default function CouponCheck({ userId, colors, productSlug }) {
 
     setChecking(true);
     setResult(null);
+    onApplied && onApplied(null);
     try {
       const json = await checkCouponQualification({ userId, couponCode: trimmed });
       const data = json.data || {};
+      const qualified = !!data.qualified;
       setResult({
-        qualified: !!data.qualified,
+        qualified,
         amount: data.coupon_amount,
         message: json.message,
       });
+      if (qualified) {
+        onApplied && onApplied({ code: trimmed, amount: Number(data.coupon_amount) || 0 });
+      }
     } catch (error) {
       setResult({ qualified: false, message: error.message || 'Could not check this code right now.' });
     } finally {
@@ -122,6 +127,7 @@ export default function CouponCheck({ userId, colors, productSlug }) {
             onChangeText={(text) => {
               setCode(text);
               setResult(null);
+              onApplied && onApplied(null);
             }}
           />
         </View>

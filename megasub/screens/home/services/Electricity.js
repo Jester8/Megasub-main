@@ -19,6 +19,7 @@ import {
   validateMetreNumber,
   buyElectricity,
 } from '../../../lib/api';
+import { requireNetworkOrShowError } from '../../../lib/network';
 import { useTheme } from '../../../contexts/ThemeContext';
 import CategoryTabs from '../components/CategoryTabs';
 import OptionList from '../components/OptionList';
@@ -206,6 +207,7 @@ export default function Electricity({ navigate, user }) {
 
   const handleBuy = async () => {
     if (pin.length < 4 || !validated?.name) return;
+    if (!(await requireNetworkOrShowError())) return;
 
     setLoading(true);
     try {
@@ -267,7 +269,7 @@ export default function Electricity({ navigate, user }) {
           subtitle={`Your ${selectedPlan ? providerLabel(selectedPlan) : ''} bill payment was successful.`}
           amount={amount}
           details={[
-            { label: 'Provider', value: selectedPlan ? providerLabel(selectedPlan) : null },
+            { label: 'Provider', value: selectedPlan ? providerLabel(selectedPlan) : null, logo: selectedPlan ? discoLogo(providerLabel(selectedPlan)) : null },
             { label: 'Meter Number', value: meterNumber },
             { label: 'Customer Name', value: validated?.name },
             { label: 'Address', value: validated?.address },
