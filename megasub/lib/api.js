@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import { alertForPurchaseError } from './format';
 
 // Matches the BASE_URL already used by login.jsx / signup.jsx / verify.jsx.
 export const BASE_URL = 'https://mega-sub.com/api/v1/external';
@@ -116,6 +117,17 @@ export async function saveAccountSetupStatus(userId, { phone_number, pin_set } =
   }
 }
 
+// Error logs print the request body for debugging — PINs, passwords and
+// identity numbers (BVN/NIN) must never land in device logs, so those keys
+// are masked first. FormData bodies (KYC uploads) pass through untouched.
+const REDACTED_KEYS = new Set(['pin', 'password', 'bvn', 'nin']);
+function redactBody(body) {
+  if (!body || typeof body !== 'object' || typeof body.append === 'function') return body;
+  return Object.fromEntries(
+    Object.entries(body).map(([key, value]) => [key, REDACTED_KEYS.has(key) ? '***' : value])
+  );
+}
+
 // This API always responds with HTTP 200 and signals success/failure through
 // the JSON `status` field, so response.ok alone can't be trusted.
 async function request(path, { method = 'GET', body, params } = {}) {
@@ -123,16 +135,22 @@ async function request(path, { method = 'GET', body, params } = {}) {
 
   const url = `${BASE_URL}/${path}${buildQuery(params)}`;
 
+  // A FormData body (KYC's selfie/document uploads) must NOT be
+  // JSON-stringified or given an explicit Content-Type — fetch needs to set
+  // its own multipart boundary, which a forced 'application/json' header
+  // would break.
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+
   let response;
   try {
     response = await fetch(url, {
       method,
       headers: {
         Accept: 'application/json',
-        'Content-Type': 'application/json',
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: body ? JSON.stringify(body) : undefined,
+      body: body ? (isFormData ? body : JSON.stringify(body)) : undefined,
     });
   } catch (err) {
     // fetch() itself throwing (no route to the server, DNS failure, timeout)
@@ -151,7 +169,7 @@ async function request(path, { method = 'GET', body, params } = {}) {
   const json = await response.json().catch(() => ({}));
 
   if (!response.ok || json.status === false) {
-    console.log(`❌ API error on ${path}`, JSON.stringify({ httpStatus: response.status, sent: body, received: json }));
+    console.log(`❌ API error on ${path}`, JSON.stringify({ httpStatus: response.status, sent: redactBody(body), received: json }));
 
     if (response.status === 401) {
       if (!unauthorizedHandled) {
@@ -160,6 +178,33 @@ async function request(path, { method = 'GET', body, params } = {}) {
       }
       const error = new Error('Your session has expired. Please log in again.');
       error.payload = json;
+      error.isUnauthorized = true;
+      throw error;
+    }
+
+    // A route the server doesn't have (V2 endpoints that aren't deployed to
+    // production yet) answers 404 "The route ... could not be found." Flagged
+    // so callers can degrade gracefully: screens show a "coming soon" notice
+    // (isUnavailable) and buyBulkData falls back to looping buy_data
+    // (isRouteMissing) instead of surfacing a generic failure.
+    if (response.status === 404 && /route .* could not be found/i.test(json?.message || '')) {
+      const error = new Error('This feature is not available yet. Please check back soon.');
+      error.payload = json;
+      error.isRouteMissing = true;
+      error.isUnavailable = true;
+      throw error;
+    }
+
+    // Provider-backed V2 products (cards, eSIM, result checker) that aren't
+    // live yet answer HTTP 503 with data.available === false and demo values
+    // (is_demo: true). That is a deliberate "not available yet" signal, not a
+    // server fault, and the demo values must never be shown as a customer's
+    // real assets — so it gets its own flag, checked before the generic 5xx
+    // branch below, and the backend's own message is kept.
+    if (json?.data?.available === false || json?.data?.is_demo === true) {
+      const error = new Error(json.message || 'This product is temporarily unavailable.');
+      error.payload = json;
+      error.isUnavailable = true;
       throw error;
     }
 
@@ -220,6 +265,194 @@ export const buyElectricity = (payload) => request('buy_electricity', { method: 
 
 export const validateCableTv = (payload) => request('validate_cable_tv', { method: 'POST', body: payload });
 export const validateMetreNumber = (payload) => request('validate_metre_number', { method: 'POST', body: payload });
+
+// ── Result Checker (WAEC / NECO) — V2 ──────────────────────────────
+// Catalog of exam boards on offer + unit price per PIN, mirroring
+// fetch_networks' shape so ResultChecker.js's loading/error/empty states
+// follow the same pattern every other catalog screen already uses.
+export const fetchResultCheckerProducts = (userId) =>
+  request('fetch_result_checker_products', { params: { user_id: userId } });
+
+// quantity > 1 buys a batch in one call; response carries one PIN per unit
+// (see ResultChecker.js's success screen) so a partial failure can still
+// show whichever PINs did get issued.
+export const buyResultChecker = (payload) => request('buy_result_checker', { method: 'POST', body: payload });
+
+// Unused scratch-card stock metadata (serial + amount only — PINs stay
+// hidden server-side until actually purchased). examType defaults to 'all'.
+export const fetchResultCheckerUnusedCards = (userId, examType = 'all') =>
+  request('fetch_result_checker_unused_cards', { params: { user_id: userId, exam_type: examType } });
+
+export const fetchResultCheckerTransactions = (userId, examType = 'all') =>
+  request('fetch_result_checker_transactions', { params: { user_id: userId, exam_type: examType } });
+
+// ── Global eSIM — V2 ────────────────────────────────────────────────
+export const fetchEsimCountries = (userId, search) =>
+  request('fetch_esim_countries', { params: { user_id: userId, search } });
+
+export const fetchEsimPlans = ({ userId, countryCode }) =>
+  request('fetch_esim_plans', { params: { user_id: userId, country_code: countryCode } });
+
+export const buyEsim = (payload) => request('buy_esim', { method: 'POST', body: payload });
+
+export const fetchMyEsims = (userId) =>
+  request('fetch_my_esims', { params: { user_id: userId } });
+
+// ── Virtual Card — V2 ───────────────────────────────────────────────
+// Products list which card types exist and whether each is enabled (Dollar
+// is on, Naira is listed but disabled).
+export const fetchVirtualCardProducts = (userId) =>
+  request('fetch_virtual_card_products', { params: { user_id: userId } });
+
+// Card creation is KYC-gated: status is one of unavailable/pending/
+// verified (and whatever the provider adds), submit_card_kyc takes the BVN
+// plus identity and address details.
+export const fetchCardKycStatus = (userId) =>
+  request('fetch_card_kyc_status', { params: { user_id: userId } });
+
+export const submitCardKyc = (payload) => request('submit_card_kyc', { method: 'POST', body: payload });
+
+// data is { cards: [...] }, not a bare array.
+export const fetchCards = (userId) => request('fetch_cards', { params: { user_id: userId } });
+
+export const createCard = (payload) => request('create_card', { method: 'POST', body: payload });
+
+export const fetchCardDetails = ({ userId, cardId }) =>
+  request('fetch_card_details', { params: { user_id: userId, card_id: cardId } });
+
+export const freezeCard = (payload) => request('freeze_card', { method: 'POST', body: payload });
+export const unfreezeCard = (payload) => request('unfreeze_card', { method: 'POST', body: payload });
+export const fundCard = (payload) => request('fund_card', { method: 'POST', body: payload });
+
+// ── Bulk Data — V2 ──────────────────────────────────────────────────
+// One plan/network applies to every recipient (same convention as the
+// existing Bulk Recharge/airtime batch); `recipients` is a plain array of
+// phone numbers. Response carries a per-recipient status so a partial
+// failure can be retried without re-charging the ones that already went
+// through.
+// The server-side batch routes (buy_bulk_data / retry_bulk_data_batch) are
+// preferred, but they are not deployed to production yet. Until they are,
+// this falls back to the documented single-recipient buy_data, called once
+// per recipient, sequentially, so Bulk Data works today and switches to the
+// server batch on its own once that ships. Both paths return the same shape:
+// { data: { batch_id, total_amount, successful_count, failed_count,
+// results: [{ phone_number, status, failure_reason, transaction_id }] } }.
+const LOCAL_BATCH_PREFIX = 'local-';
+export const isLocalBulkBatch = (batchId) => String(batchId || '').startsWith(LOCAL_BATCH_PREFIX);
+
+// Errors that mean every remaining recipient would fail the same way (wrong
+// PIN, no connection, expired session, low balance, unverified-phone limit),
+// as opposed to a problem with one particular number.
+function stopsBatch(error) {
+  const info = alertForPurchaseError(error);
+  return (
+    !!error.isNetworkError ||
+    !!error.isUnauthorized ||
+    info.isWrongPin ||
+    info.requiresPhoneVerification ||
+    /insufficient|low balance|not enough/i.test(error.message || '')
+  );
+}
+
+async function runBulkDataLocally(base, recipients, { unitPrice = 0, batchId, onProgress } = {}) {
+  const results = [];
+  let stopReason = null;
+
+  for (let i = 0; i < recipients.length; i += 1) {
+    const phone = recipients[i];
+
+    if (stopReason) {
+      results.push({ phone_number: phone, status: 'failed', failure_reason: stopReason, transaction_id: null });
+      continue;
+    }
+
+    onProgress && onProgress(i, recipients.length);
+    try {
+      const json = await request('buy_data', {
+        method: 'POST',
+        body: { ...base, phone_number: phone, wallet_category: 'main_wallet', validatephonenetwork: 1 },
+      });
+      results.push({
+        phone_number: phone,
+        status: 'successful',
+        failure_reason: null,
+        transaction_id: json?.data?.id ?? json?.data?.transaction_id ?? null,
+      });
+    } catch (error) {
+      // Nothing has been spent yet, so hand a batch-wide problem straight to
+      // the screen (wrong-PIN modal, connection modal, ...) instead of
+      // showing a list of identical failures.
+      if (i === 0 && stopsBatch(error)) throw error;
+
+      if (stopsBatch(error)) {
+        // A dropped connection is ambiguous: the purchase may have gone
+        // through. Say so, and never retry it automatically.
+        const reason = error.isNetworkError
+          ? 'No response received. Check Transaction History before retrying, this purchase may have gone through.'
+          : error.message;
+        results.push({ phone_number: phone, status: 'failed', failure_reason: reason, transaction_id: null });
+        stopReason = error.isNetworkError ? 'Not attempted, connection was lost.' : `Not attempted: ${error.message}`;
+      } else {
+        results.push({
+          phone_number: phone,
+          status: 'failed',
+          failure_reason: error.message || 'Purchase failed.',
+          transaction_id: null,
+        });
+      }
+    }
+  }
+
+  const successful = results.filter((r) => r.status === 'successful').length;
+  return {
+    status: true,
+    code: 200,
+    message: 'Bulk data batch processed.',
+    data: {
+      batch_id: batchId || `${LOCAL_BATCH_PREFIX}${Date.now()}`,
+      total_amount: (Number(unitPrice) * successful).toFixed(4),
+      successful_count: successful,
+      failed_count: results.length - successful,
+      results,
+    },
+  };
+}
+
+// options (used by the fallback only): { unitPrice, onProgress(index, total) }
+export async function buyBulkData(payload, options = {}) {
+  try {
+    return await request('buy_bulk_data', { method: 'POST', body: payload });
+  } catch (error) {
+    if (!error.isRouteMissing) throw error;
+  }
+  const { recipients, ...base } = payload;
+  return runBulkDataLocally(base, recipients, options);
+}
+
+// For a batch made by the fallback there is nothing server-side to retry, so
+// `local` carries what is needed to re-run just the failed recipients:
+// { base: <buy_data fields>, recipients: [failed numbers], unitPrice, onProgress }.
+export async function retryBulkDataBatch(payload, local) {
+  if (local && isLocalBulkBatch(payload.batch_id)) {
+    const { base, recipients, ...options } = local;
+    return runBulkDataLocally({ ...base, user_id: payload.user_id, pin: payload.pin }, recipients, {
+      ...options,
+      batchId: payload.batch_id,
+    });
+  }
+  return request('retry_bulk_data_batch', { method: 'POST', body: payload });
+}
+
+// ── Standalone KYC (SecureWave BVN) — V2 ────────────────────────────
+// Both calls identify the user by their login token alone — the backend takes
+// no user_id here. fetch_kyc_status returns the state plus the KYC rules
+// (fee, free first verification, max attempts, minimum profile-match score).
+export const fetchKycStatus = () => request('fetch_kyc_status');
+
+// Only calls SecureWave when the user isn't already verified; once verified
+// the backend answers from its saved result instead of re-charging. May carry
+// a verification fee (see settings.verification_fee in fetch_kyc_status).
+export const verifyBvn = ({ phone, bvn }) => request('verify_bvn', { method: 'POST', body: { phone, bvn } });
 
 // Full account profile incl. live wallet balance (main_wallet). /login only
 // returns { token, user: <id> }, so this is the only source of truth for

@@ -3,8 +3,8 @@ import { View, Text, TouchableOpacity, StyleSheet, Modal, TouchableWithoutFeedba
 import { Ionicons } from '@expo/vector-icons';
 
 const FONTS = {
-  regular: 'Manrope_400Regular',
-  bold: 'Manrope_700Bold',
+  regular: 'Montserrat_400Regular',
+  bold: 'Montserrat_700Bold',
 };
 
 const ERROR = '#EF4444';

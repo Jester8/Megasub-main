@@ -13,12 +13,8 @@ import {
 } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  fetchProductPlanCategories,
-  fetchProductPlans,
-  validateCableTv,
-  buyCableTv,
-} from '../../../lib/api';
+import { validateCableTv, buyCableTv } from '../../../lib/api';
+import { useCatalogQuery } from '../../../lib/queries';
 import { requireNetworkOrShowError } from '../../../lib/network';
 import { useTheme } from '../../../contexts/ThemeContext';
 import CategoryTabs from '../components/CategoryTabs';
@@ -28,11 +24,11 @@ import WrongPinModal from '../components/WrongPinModal';
 import { formatNaira, alertForPurchaseError } from '../../../lib/format';
 
 const FONTS = {
-  regular: 'Manrope_400Regular',
-  medium: 'Manrope_500Medium',
-  semibold: 'Manrope_600SemiBold',
-  bold: 'Manrope_700Bold',
-  extrabold: 'Manrope_800ExtraBold',
+  regular: 'Montserrat_400Regular',
+  medium: 'Montserrat_500Medium',
+  semibold: 'Montserrat_600SemiBold',
+  bold: 'Montserrat_700Bold',
+  extrabold: 'Montserrat_800ExtraBold',
 };
 
 const BRAND = '#4A55DD';
@@ -107,10 +103,27 @@ export default function Cable({ navigate, user }) {
   const { colors } = useTheme();
   const [step, setStep] = useState('input');
 
-  const [providers, setProviders] = useState([]);
-  const [loadingProviders, setLoadingProviders] = useState(true);
-  const [allPlans, setAllPlans] = useState([]);
-  const [loadingPlans, setLoadingPlans] = useState(true);
+  // Categories/plans come from the shared, disk-persisted cache (warmed
+  // right after login by lib/warmup.js), so this screen shows providers
+  // immediately on a repeat visit instead of fetching on every tap.
+  const {
+    data: catalog,
+    isLoading: loadingCatalog,
+    isError: catalogError,
+    error: catalogErrorObj,
+  } = useCatalogQuery(user?.id, 'cable_subscription');
+  const loadingProviders = loadingCatalog;
+  const loadingPlans = loadingCatalog;
+  const providers = useMemo(
+    () =>
+      (catalog?.categories || []).map((c) => ({
+        id: c.id,
+        label: c.product_plan_category_name,
+        logo: cableLogo(c.product_plan_category_name),
+      })),
+    [catalog]
+  );
+  const allPlans = catalog?.plans || [];
 
   const [selectedProvider, setSelectedProvider] = useState(null);
   const [selectedPackage, setSelectedPackage] = useState(null);
@@ -125,32 +138,10 @@ export default function Cable({ navigate, user }) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    loadCatalog();
-  }, []);
-
-  const loadCatalog = async () => {
-    setLoadingProviders(true);
-    setLoadingPlans(true);
-    try {
-      const [categoriesJson, plansJson] = await Promise.all([
-        fetchProductPlanCategories({ userId: user?.id, productSlug: 'cable_subscription' }),
-        fetchProductPlans({ userId: user?.id, productSlug: 'cable_subscription' }),
-      ]);
-      setProviders(
-        (categoriesJson.data || []).map((c) => ({
-          id: c.id,
-          label: c.product_plan_category_name,
-          logo: cableLogo(c.product_plan_category_name),
-        }))
-      );
-      setAllPlans(plansJson.data || []);
-    } catch (error) {
-      Alert.alert('Network Error', error.message || 'Could not load cable providers.');
-    } finally {
-      setLoadingProviders(false);
-      setLoadingPlans(false);
+    if (catalogError) {
+      Alert.alert('Network Error', catalogErrorObj?.message || 'Could not load cable providers.');
     }
-  };
+  }, [catalogError]);
 
   const packages = useMemo(
     () =>

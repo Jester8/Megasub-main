@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TermsPrivacyBody } from '../TermsPrivacy';
 
 const FONTS = {
-  bold: 'Manrope_700Bold',
+  bold: 'Montserrat_700Bold',
 };
 
 const BRAND = '#4A55DD';

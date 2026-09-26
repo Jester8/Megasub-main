@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { fetchNetworks, fetchProductPlanCategories, fetchProductPlans, buyAirtime } from '../../../lib/api';
+import { fetchProductPlanCategories, fetchProductPlans, buyAirtime } from '../../../lib/api';
+import { useNetworksQuery } from '../../../lib/queries';
 import { requireNetworkOrShowError } from '../../../lib/network';
 import { useTheme } from '../../../contexts/ThemeContext';
 import CategoryTabs from '../components/CategoryTabs';
@@ -21,16 +22,17 @@ import PlanGrid from '../components/PlanGrid';
 import SuccessView from '../components/SuccessView';
 import ContactPicker from '../components/ContactPicker';
 import WrongPinModal from '../components/WrongPinModal';
+import PurchaseSuccessModal from '../components/PurchaseSuccessModal';
 import CouponCheck from '../components/CouponCheck';
 import { detectNetworkFromPhone, findNetworkByLabel } from '../../../lib/networkDetect';
 import { formatNaira, alertForPurchaseError, stripNetworkPrefix, sanitizePositiveInt } from '../../../lib/format';
 
 const FONTS = {
-  regular: 'Manrope_400Regular',
-  medium: 'Manrope_500Medium',
-  semibold: 'Manrope_600SemiBold',
-  bold: 'Manrope_700Bold',
-  extrabold: 'Manrope_800ExtraBold',
+  regular: 'Montserrat_400Regular',
+  medium: 'Montserrat_500Medium',
+  semibold: 'Montserrat_600SemiBold',
+  bold: 'Montserrat_700Bold',
+  extrabold: 'Montserrat_800ExtraBold',
 };
 
 const BRAND = '#4A55DD';
@@ -129,9 +131,10 @@ export default function Airtime({ navigate, user }) {
   // Step Workflow Toggle: 'input' (Form screen) or 'confirm' (Pin screen)
   const [step, setStep] = useState('input');
 
-  // Catalog State
-  const [networks, setNetworks] = useState([]);
-  const [loadingNetworks, setLoadingNetworks] = useState(true);
+  // Catalog State — networks come from the shared, disk-persisted cache
+  // (warmed right after login by lib/warmup.js), so this screen shows the
+  // list immediately on a repeat visit instead of fetching on every tap.
+  const { data: networks = [], isLoading: loadingNetworks } = useNetworksQuery(user?.id);
   const [categories, setCategories] = useState([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [plans, setPlans] = useState([]);
@@ -154,10 +157,14 @@ export default function Airtime({ navigate, user }) {
   // Transaction record returned by buy_airtime — carries the real
   // amount/discounted_amount so the receipt can break out the bonus.
   const [purchaseTx, setPurchaseTx] = useState(null);
+  const [successModalVisible, setSuccessModalVisible] = useState(false);
 
+  // Auto-selects the first network once the cached/fetched list arrives —
+  // matches the old fetch-then-select behavior, just sourced from the query
+  // cache instead of a one-off fetch.
   useEffect(() => {
-    loadNetworks();
-  }, []);
+    if (!selectedNetwork && networks.length > 0) setSelectedNetwork(networks[0]);
+  }, [networks]);
 
   useEffect(() => {
     if (selectedNetwork) loadCategories(selectedNetwork.id);
@@ -166,20 +173,6 @@ export default function Airtime({ navigate, user }) {
   useEffect(() => {
     if (selectedNetwork && selectedCategory) loadPlans(selectedNetwork.id, selectedCategory.id);
   }, [selectedCategory]);
-
-  const loadNetworks = async () => {
-    setLoadingNetworks(true);
-    try {
-      const json = await fetchNetworks(user?.id);
-      const list = json.data || [];
-      setNetworks(list);
-      if (list.length > 0) setSelectedNetwork(list[0]);
-    } catch (error) {
-      Alert.alert('Network Error', error.message || 'Could not load networks.');
-    } finally {
-      setLoadingNetworks(false);
-    }
-  };
 
   const loadCategories = async (networkId) => {
     setLoadingCategories(true);
@@ -260,6 +253,7 @@ export default function Airtime({ navigate, user }) {
       const json = await buyAirtime(payload);
       setPurchaseTx(json?.data || null);
       setStep('success');
+      setSuccessModalVisible(true);
     } catch (error) {
       const alert = alertForPurchaseError(error);
       if (alert.isWrongPin) {
@@ -539,6 +533,11 @@ export default function Airtime({ navigate, user }) {
           setPin('');
           setPinKey((k) => k + 1);
         }}
+      />
+      <PurchaseSuccessModal
+        visible={successModalVisible}
+        message="Airtime Purchase Successful"
+        onClose={() => setSuccessModalVisible(false)}
       />
     </View>
   );

@@ -6,9 +6,9 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { SERVICES, SERVICE_SCREENS, isComingSoon } from './servicesConfig';
 
 const FONTS = {
-  medium: 'Manrope_500Medium',
-  semibold: 'Manrope_600SemiBold',
-  bold: 'Manrope_700Bold',
+  medium: 'Montserrat_500Medium',
+  semibold: 'Montserrat_600SemiBold',
+  bold: 'Montserrat_700Bold',
 };
 
 export default function AllServices({ navigate }) {

@@ -19,11 +19,11 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { updateReferralCode } from '../../lib/api';
 
 const FONTS = {
-  regular: 'Manrope_400Regular',
-  medium: 'Manrope_500Medium',
-  semibold: 'Manrope_600SemiBold',
-  bold: 'Manrope_700Bold',
-  extrabold: 'Manrope_800ExtraBold',
+  regular: 'Montserrat_400Regular',
+  medium: 'Montserrat_500Medium',
+  semibold: 'Montserrat_600SemiBold',
+  bold: 'Montserrat_700Bold',
+  extrabold: 'Montserrat_800ExtraBold',
 };
 
 const BRAND = '#4A55DD';

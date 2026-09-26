@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, ActivityIndicator, StyleSheet, Alert, BackHandler } from 'react-native';
+import { View, StyleSheet, Alert, BackHandler } from 'react-native';
+import {
+  useFonts,
+  Montserrat_400Regular,
+  Montserrat_500Medium,
+  Montserrat_600SemiBold,
+  Montserrat_700Bold,
+  Montserrat_800ExtraBold,
+} from '@expo-google-fonts/montserrat';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
@@ -23,6 +31,13 @@ import Data from './screens/home/services/Data';
 import Cable from './screens/home/services/Cable';
 import Electricity from './screens/home/services/Electricity';
 import Bulk from './screens/home/services/Bulk';
+import ResultChecker from './screens/home/services/ResultChecker';
+import ESIM from './screens/home/services/ESIM';
+import MyESIMs from './screens/home/services/MyESIMs';
+import VirtualCard from './screens/home/services/VirtualCard';
+import BulkData from './screens/home/services/BulkData';
+import CardKYC from './screens/home/CardKYC';
+import BvnKYC from './screens/home/BvnKYC';
 import ComingSoon from './screens/home/services/ComingSoon';
 import AllServices from './screens/home/AllServices';
 import Notifications from './screens/home/Notifications';
@@ -32,18 +47,36 @@ import Wallet from './screens/home/Wallet';
 import Profile from './screens/home/Profile';
 import ChangePin from './screens/home/ChangePin';
 import ChangePassword from './screens/home/ChangePassword';
-import Verification from './screens/home/Verification';
 import ReferEarn from './screens/home/ReferEarn';
 import HelpCenter from './screens/home/HelpCenter';
 import ContactSupport from './screens/home/ContactSupport';
 import TermsPrivacy from './screens/home/TermsPrivacy';
 
+import { preloadSlides } from './lib/preloadSlides';
+
+import LogoLoader from './screens/home/components/LogoLoader';
 const USER_KEY = 'megasub_user_data';
 const SESSION_KEY = 'megasub_session_token';
 const ONBOARDING_KEY = 'megasub_onboarding_seen';
 const BIOMETRIC_KEY = 'megasub_biometric_enabled';
 
 export default function App() {
+  // Every screen names its fontFamily explicitly, so the fonts must be
+  // registered before the first screen renders. A load error falls back to the
+  // system font rather than blocking the app.
+  const [fontsLoaded, fontError] = useFonts({
+    Montserrat_400Regular,
+    Montserrat_500Medium,
+    Montserrat_600SemiBold,
+    Montserrat_700Bold,
+    Montserrat_800ExtraBold,
+  });
+  // The home slider images are warmed up behind the boot loader so the slider
+  // is already there when Home first renders.
+  const [slidesReady, setSlidesReady] = useState(false);
+  useEffect(() => {
+    preloadSlides().finally(() => setSlidesReady(true));
+  }, []);
   // null while the saved session/onboarding state is still being read from
   // SecureStore, so we never flash onboarding/login before we know better.
   const [screen, setScreen] = useState(null);
@@ -313,9 +346,11 @@ function navigate(s, userData) {
   if (screen === 'cable')      content = <Cable navigate={navigate} user={user} />;
   if (screen === 'electricity') content = <Electricity navigate={navigate} user={user} />;
   if (screen === 'bulk')       content = <Bulk navigate={navigate} user={user} />;
-  if (screen === 'coming-soon-esim')         content = <ComingSoon navigate={navigate} title="E-SIM" icon="wifi" />;
+  if (screen === 'result-checker') content = <ResultChecker navigate={navigate} user={user} />;
+  if (screen === 'esim')       content = <ESIM navigate={navigate} user={user} />;
+  if (screen === 'my-esims')   content = <MyESIMs navigate={navigate} user={user} />;
+  if (screen === 'virtual-card') content = <VirtualCard navigate={navigate} user={user} />;
   if (screen === 'coming-soon-waec')         content = <ComingSoon navigate={navigate} title="WAEC / NECO" icon="book-open" />;
-  if (screen === 'coming-soon-virtual-card') content = <ComingSoon navigate={navigate} title="Virtual Card" icon="credit-card" />;
   if (screen === 'all-services') content = <AllServices navigate={navigate} />;
   if (screen === 'notifications') content = <Notifications navigate={navigate} user={user} />;
   if (screen === 'history')    content = <TransactionHistory navigate={navigate} user={user} />;
@@ -324,14 +359,14 @@ function navigate(s, userData) {
   if (screen === 'profile')    content = <Profile navigate={navigate} user={user} />;
   if (screen === 'change-pin')      content = <ChangePin navigate={navigate} user={user} />;
   if (screen === 'change-password') content = <ChangePassword navigate={navigate} user={user} />;
-  if (screen === 'kyc')             content = <Verification navigate={navigate} user={user} />;
+  if (screen === 'kyc')             content = <BvnKYC navigate={navigate} user={user} />;
+  if (screen === 'card-kyc')        content = <CardKYC navigate={navigate} user={user} />;
+  if (screen === 'bulk-data')       content = <BulkData navigate={navigate} user={user} />;
   if (screen === 'refer-earn')      content = <ReferEarn navigate={navigate} user={user} />;
   if (screen === 'help-center')     content = <HelpCenter navigate={navigate} />;
   if (screen === 'contact-support') content = <ContactSupport navigate={navigate} />;
   if (screen === 'terms-privacy')   content = <TermsPrivacy navigate={navigate} />;
   console.log('📱 Current screen:', screen);
-  console.log('👤 Current user in App state:', user);
-  console.log('👤 Current user first_name in App:', user?.first_name);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -345,9 +380,9 @@ function navigate(s, userData) {
           }}
         >
           <ThemeProvider>
-            {screen === null ? (
+            {screen === null || !slidesReady || !(fontsLoaded || fontError) ? (
               <View style={styles.bootLoader}>
-                <ActivityIndicator color="#4A55DD" size="large" />
+                <LogoLoader />
               </View>
             ) : (
               content

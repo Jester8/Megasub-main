@@ -1,8 +1,30 @@
 import { InteractionManager } from 'react-native';
 import { queryClient } from './queryClient';
 import { queryKeys } from './queries';
-import { fetchDashboard, fetchNetworks, fetchProducts, fetchTransactions } from './api';
+import {
+  fetchDashboard,
+  fetchNetworks,
+  fetchProducts,
+  fetchTransactions,
+  fetchProductPlanCategories,
+  fetchProductPlans,
+} from './api';
 import { toDateParam } from './transactionMeta';
+
+// Electricity's plan listing 403s without an amount placeholder — same
+// workaround Electricity.js itself already uses.
+const CATALOG_SLUGS = [
+  { slug: 'cable_subscription', extraParams: {} },
+  { slug: 'utility_bills', extraParams: { amount: 100 } },
+];
+
+async function fetchCatalog(userId, productSlug, extraParams) {
+  const [categoriesJson, plansJson] = await Promise.all([
+    fetchProductPlanCategories({ userId, productSlug }),
+    fetchProductPlans({ userId, productSlug, ...extraParams }),
+  ]);
+  return { categories: categoriesJson.data || [], plans: plansJson.data || [] };
+}
 
 const WINDOW_DAYS = 30;
 
@@ -45,6 +67,12 @@ export function warmAppData(userId) {
           queryFn: () =>
             fetchTransactions({ userId, dateFrom: toDateParam(dateFrom), dateTo: toDateParam(dateTo) }),
         }),
+        ...CATALOG_SLUGS.map(({ slug, extraParams }) =>
+          queryClient.prefetchQuery({
+            queryKey: queryKeys.catalog(userId, slug),
+            queryFn: () => fetchCatalog(userId, slug, extraParams),
+          })
+        ),
       ]);
     } finally {
       warming = false;

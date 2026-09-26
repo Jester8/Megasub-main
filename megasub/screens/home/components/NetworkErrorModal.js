@@ -4,8 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { setNetworkErrorHandler, isOnline } from '../../../lib/network';
 
 const FONTS = {
-  regular: 'Manrope_400Regular',
-  bold: 'Manrope_700Bold',
+  regular: 'Montserrat_400Regular',
+  bold: 'Montserrat_700Bold',
 };
 
 const BRAND = '#4A55DD';

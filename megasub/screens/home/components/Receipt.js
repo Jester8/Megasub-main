@@ -5,11 +5,11 @@ import { Ionicons } from '@expo/vector-icons';
 const LOGO = require('../../../assets/logo.png');
 
 const FONTS = {
-  regular: 'Manrope_400Regular',
-  medium: 'Manrope_500Medium',
-  semibold: 'Manrope_600SemiBold',
-  bold: 'Manrope_700Bold',
-  extrabold: 'Manrope_800ExtraBold',
+  regular: 'Montserrat_400Regular',
+  medium: 'Montserrat_500Medium',
+  semibold: 'Montserrat_600SemiBold',
+  bold: 'Montserrat_700Bold',
+  extrabold: 'Montserrat_800ExtraBold',
 };
 
 // The visual receipt card shared by SuccessView (fresh purchase) and

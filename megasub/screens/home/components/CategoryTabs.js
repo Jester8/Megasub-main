@@ -2,8 +2,8 @@ import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 
 const FONTS = {
-  semibold: 'Manrope_600SemiBold',
-  bold: 'Manrope_700Bold',
+  semibold: 'Montserrat_600SemiBold',
+  bold: 'Montserrat_700Bold',
 };
 
 // Segmented pill selector shared by Data/Airtime/Cable for picking a plan

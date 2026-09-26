@@ -5,9 +5,9 @@ import { checkCouponQualification, fetchActiveCoupons } from '../../../lib/api';
 import { formatNaira } from '../../../lib/format';
 
 const FONTS = {
-  medium: 'Manrope_500Medium',
-  semibold: 'Manrope_600SemiBold',
-  bold: 'Manrope_700Bold',
+  medium: 'Montserrat_500Medium',
+  semibold: 'Montserrat_600SemiBold',
+  bold: 'Montserrat_700Bold',
 };
 
 const BRAND = '#4A55DD';

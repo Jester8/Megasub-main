@@ -9,7 +9,7 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useResponsive } from '../../../lib/responsive';
-import { SERVICES, SERVICE_SCREENS } from '../servicesConfig';
+import { HOME_SERVICES, SERVICE_SCREENS } from '../servicesConfig';
 
 const PADDING = 20;
 const CARD_PADDING = 14;
@@ -17,8 +17,8 @@ const GAP = 6;
 const COLUMNS = 4;
 
 const FONTS = {
-  semibold: 'Manrope_600SemiBold',
-  bold: 'Manrope_700Bold',
+  semibold: 'Montserrat_600SemiBold',
+  bold: 'Montserrat_700Bold',
 };
 
 function ServiceItem({ service, onPress, itemSize, iconSize, textColor }) {
@@ -63,13 +63,13 @@ export default function ServicesGrid({ navigate, onServicePress, onSeeAllPress }
       <View style={styles.headerRow}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Services</Text>
         <TouchableOpacity onPress={onSeeAllPress}>
-          <Text style={styles.seeAll}>See all</Text>
+          <Text style={[styles.seeAll, colors.mode === 'dark' && { color: '#FFFFFF' }]}>See all</Text>
         </TouchableOpacity>
       </View>
 
       <View style={[styles.card, { backgroundColor: colors.cardAlt }, Platform.OS === 'android' && { backgroundColor: colors.card }]}>
         <View style={styles.grid}>
-          {SERVICES.map((s) => (
+          {HOME_SERVICES.map((s) => (
             <ServiceItem key={s.id} service={s} onPress={handlePress} itemSize={itemSize} iconSize={iconSize} textColor={colors.text} />
           ))}
         </View>

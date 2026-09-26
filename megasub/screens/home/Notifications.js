@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { fetchTransactions, fetchNairaFundingTransactions } from '../../lib/api';
 import ReceiptModal from './components/ReceiptModal';
+import LogoLoader from './components/LogoLoader';
 import {
   CATEGORY_STYLE,
   DEFAULT_STYLE,
@@ -28,10 +29,10 @@ import {
 } from '../../lib/transactionMeta';
 
 const FONTS = {
-  regular: 'Manrope_400Regular',
-  medium: 'Manrope_500Medium',
-  semibold: 'Manrope_600SemiBold',
-  bold: 'Manrope_700Bold',
+  regular: 'Montserrat_400Regular',
+  medium: 'Montserrat_500Medium',
+  semibold: 'Montserrat_600SemiBold',
+  bold: 'Montserrat_700Bold',
 };
 
 const BRAND = '#4A55DD';
@@ -199,7 +200,7 @@ export default function Notifications({ navigate, user }) {
       </View>
 
       {loading ? (
-        <ActivityIndicator color={BRAND} style={styles.loader} />
+        <LogoLoader centered />
       ) : (
         <ScrollView
           contentContainerStyle={styles.list}

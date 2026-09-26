@@ -13,12 +13,8 @@ import {
 } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  fetchProductPlanCategories,
-  fetchProductPlans,
-  validateMetreNumber,
-  buyElectricity,
-} from '../../../lib/api';
+import { validateMetreNumber, buyElectricity } from '../../../lib/api';
+import { useCatalogQuery } from '../../../lib/queries';
 import { requireNetworkOrShowError } from '../../../lib/network';
 import { useTheme } from '../../../contexts/ThemeContext';
 import CategoryTabs from '../components/CategoryTabs';
@@ -28,11 +24,11 @@ import WrongPinModal from '../components/WrongPinModal';
 import { formatNaira, alertForPurchaseError, sanitizePositiveInt } from '../../../lib/format';
 
 const FONTS = {
-  regular: 'Manrope_400Regular',
-  medium: 'Manrope_500Medium',
-  semibold: 'Manrope_600SemiBold',
-  bold: 'Manrope_700Bold',
-  extrabold: 'Manrope_800ExtraBold',
+  regular: 'Montserrat_400Regular',
+  medium: 'Montserrat_500Medium',
+  semibold: 'Montserrat_600SemiBold',
+  bold: 'Montserrat_700Bold',
+  extrabold: 'Montserrat_800ExtraBold',
 };
 
 const BRAND = '#4A55DD';
@@ -117,10 +113,24 @@ export default function Electricity({ navigate, user }) {
   const { colors } = useTheme();
   const [step, setStep] = useState('input');
 
-  const [categories, setCategories] = useState([]);
-  const [loadingCategories, setLoadingCategories] = useState(true);
-  const [plans, setPlans] = useState([]);
-  const [loadingPlans, setLoadingPlans] = useState(true);
+  // Categories/plans come from the shared, disk-persisted cache (warmed
+  // right after login by lib/warmup.js), so this screen shows providers
+  // immediately on a repeat visit instead of fetching on every tap.
+  const {
+    data: catalog,
+    isLoading: loadingCategories,
+    isError: catalogError,
+    error: catalogErrorObj,
+  } = useCatalogQuery(user?.id, 'utility_bills', { amount: 100 });
+  const loadingPlans = loadingCategories;
+  // fetch_product_plan_categories returns the billing type ("PREPAID") —
+  // the actual distribution companies (IBEDC, AEDC, EKEDC, etc.) live one
+  // level down, in each plan's product_plan_name.
+  const categories = useMemo(
+    () => (catalog?.categories || []).map((c) => ({ id: c.id, label: c.product_plan_category_name })),
+    [catalog]
+  );
+  const plans = catalog?.plans || [];
 
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedPlan, setSelectedPlan] = useState(null);
@@ -136,31 +146,14 @@ export default function Electricity({ navigate, user }) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    loadCatalog();
-  }, []);
+    if (!selectedCategory && categories.length > 0) setSelectedCategory(categories[0]);
+  }, [categories]);
 
-  const loadCatalog = async () => {
-    setLoadingCategories(true);
-    setLoadingPlans(true);
-    try {
-      // fetch_product_plan_categories returns the billing type ("PREPAID")
-      // — the actual distribution companies (IBEDC, AEDC, EKEDC, etc.) live
-      // one level down, in each plan's product_plan_name.
-      const [categoriesJson, plansJson] = await Promise.all([
-        fetchProductPlanCategories({ userId: user?.id, productSlug: 'utility_bills' }),
-        fetchProductPlans({ userId: user?.id, productSlug: 'utility_bills', amount: 100 }),
-      ]);
-      const categoryList = (categoriesJson.data || []).map((c) => ({ id: c.id, label: c.product_plan_category_name }));
-      setCategories(categoryList);
-      if (categoryList.length > 0) setSelectedCategory(categoryList[0]);
-      setPlans(plansJson.data || []);
-    } catch (error) {
-      Alert.alert('Network Error', error.message || 'Could not load electricity providers.');
-    } finally {
-      setLoadingCategories(false);
-      setLoadingPlans(false);
+  useEffect(() => {
+    if (catalogError) {
+      Alert.alert('Network Error', catalogErrorObj?.message || 'Could not load electricity providers.');
     }
-  };
+  }, [catalogError]);
 
   // "PREPAID IBADAN {IBEDC}" -> "IBADAN {IBEDC}" — the category name is
   // already shown above the list, so the prefix on every row is just noise.

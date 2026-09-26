@@ -7,7 +7,6 @@ import {
   StyleSheet,
   ScrollView,
   StatusBar,
-  ActivityIndicator,
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,12 +19,13 @@ import { fetchTransactions } from '../../lib/api';
 import { detectTransactionLogo } from '../../lib/logos';
 import { CATEGORY_STYLE, DEFAULT_STYLE, STATUS_LABELS, formatDateShort, toDateParam } from '../../lib/transactionMeta';
 
+import LogoLoader from './components/LogoLoader';
 const FONTS = {
-  regular: 'Manrope_400Regular',
-  medium: 'Manrope_500Medium',
-  semibold: 'Manrope_600SemiBold',
-  bold: 'Manrope_700Bold',
-  extrabold: 'Manrope_800ExtraBold',
+  regular: 'Montserrat_400Regular',
+  medium: 'Montserrat_500Medium',
+  semibold: 'Montserrat_600SemiBold',
+  bold: 'Montserrat_700Bold',
+  extrabold: 'Montserrat_800ExtraBold',
 };
 
 const BRAND = '#4A55DD';
@@ -161,13 +161,13 @@ export default function Wallet({ navigate, user }) {
         <View style={styles.headerRow}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Activity</Text>
           <TouchableOpacity onPress={() => navigate && navigate('history')}>
-            <Text style={styles.seeAll}>See all</Text>
+            <Text style={[styles.seeAll, colors.mode === 'dark' && { color: '#FFFFFF' }]}>See all</Text>
           </TouchableOpacity>
         </View>
 
         <View style={[styles.listCard, { backgroundColor: colors.card }]}>
           {loading ? (
-            <ActivityIndicator color={BRAND} style={styles.loader} />
+            <LogoLoader size={44} />
           ) : error ? (
             <View style={styles.emptyState}>
               <Feather name="wifi-off" size={28} color="#B7BCEF" />

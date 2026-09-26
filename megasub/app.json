@@ -4,7 +4,7 @@
     "slug": "megasub",
     "version": "1.0.2",
     "orientation": "portrait",
-    "icon": "./assets/megasubmain.png",
+    "icon": "./assets/app-icon-1024.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "ios": {
@@ -17,7 +17,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/megasubmain.png",
+        "foregroundImage": "./assets/app-icon-1024.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,

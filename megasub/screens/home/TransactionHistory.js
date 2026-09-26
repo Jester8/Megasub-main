@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -20,8 +20,10 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import BottomNav from './components/BottomNav';
 import ReceiptModal from './components/ReceiptModal';
 import { fetchTransactions } from '../../lib/api';
+import { useTransactionsQuery } from '../../lib/queries';
 import { useTheme } from '../../contexts/ThemeContext';
 import { detectTransactionLogo } from '../../lib/logos';
+import LogoLoader from './components/LogoLoader';
 import {
   CATEGORY_STYLE,
   DEFAULT_STYLE,
@@ -35,11 +37,11 @@ import {
 } from '../../lib/transactionMeta';
 
 const FONTS = {
-  regular: 'Manrope_400Regular',
-  medium: 'Manrope_500Medium',
-  semibold: 'Manrope_600SemiBold',
-  bold: 'Manrope_700Bold',
-  extrabold: 'Manrope_800ExtraBold',
+  regular: 'Montserrat_400Regular',
+  medium: 'Montserrat_500Medium',
+  semibold: 'Montserrat_600SemiBold',
+  bold: 'Montserrat_700Bold',
+  extrabold: 'Montserrat_800ExtraBold',
 };
 
 const BRAND = '#4A55DD';
@@ -129,9 +131,10 @@ function TransactionRow({ tx, colors, onPress }) {
 export default function TransactionHistory({ navigate, user }) {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
-  const [transactions, setTransactions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  // Older transactions pulled in only when a custom range reaches further
+  // back than the cached rolling window below — merged in, not cached
+  // themselves, since a custom range is a one-off rather than a common view.
+  const [customExtra, setCustomExtra] = useState([]);
   const [customLoading, setCustomLoading] = useState(false);
   const [selectedTx, setSelectedTx] = useState(null);
 
@@ -152,34 +155,35 @@ export default function TransactionHistory({ navigate, user }) {
 
   const [activeSheet, setActiveSheet] = useState(null); // 'date' | 'category' | 'status'
 
-  useEffect(() => {
-    loadTransactions();
-  }, []);
+  // Computed once (not on every render) so the query key stays stable —
+  // this is the window useTransactionsQuery's persisted cache is keyed on,
+  // so a returning user sees their last-seen transactions immediately
+  // instead of a blank loading state, with a background refetch keeping
+  // them current.
+  const [{ windowDateFrom, windowDateTo }] = useState(() => {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - FETCH_WINDOW_DAYS);
+    return { windowDateFrom: toDateParam(from), windowDateTo: toDateParam(to) };
+  });
 
-  const loadTransactions = async ({ isRefresh = false } = {}) => {
-    isRefresh ? setRefreshing(true) : setLoading(true);
-    try {
-      const dateTo = new Date();
-      const dateFrom = new Date();
-      dateFrom.setDate(dateFrom.getDate() - FETCH_WINDOW_DAYS);
+  const {
+    data: cachedTransactions = [],
+    isLoading: loading,
+    isFetching: fetching,
+    refetch: refetchTransactions,
+  } = useTransactionsQuery(user?.id, { dateFrom: windowDateFrom, dateTo: windowDateTo });
 
-      const json = await fetchTransactions({
-        userId: user?.id,
-        dateFrom: toDateParam(dateFrom),
-        dateTo: toDateParam(dateTo),
-      });
+  // isLoading is only true when there's truly nothing cached yet (first-ever
+  // visit); a returning user's refetch happens via isFetching in the
+  // background while cachedTransactions still renders instantly.
+  const refreshing = fetching && !loading;
 
-      const list = [...(json.data || [])].sort(
-        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-      setTransactions(list);
-    } catch (error) {
-      Alert.alert('Network Error', error.message || 'Could not load your transaction history.');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+  const transactions = useMemo(() => {
+    const ids = new Set(cachedTransactions.map((t) => t.id));
+    const merged = [...cachedTransactions, ...customExtra.filter((t) => !ids.has(t.id))];
+    return merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [cachedTransactions, customExtra]);
 
   const handlePickerChange = (event, selected) => {
     if (Platform.OS === 'android') setPickerTarget(null);
@@ -217,10 +221,9 @@ export default function TransactionHistory({ navigate, user }) {
           dateTo: toDateParam(to),
         });
         const incoming = json.data || [];
-        setTransactions((prev) => {
+        setCustomExtra((prev) => {
           const ids = new Set(prev.map((t) => t.id));
-          const merged = [...prev, ...incoming.filter((t) => !ids.has(t.id))];
-          return merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          return [...prev, ...incoming.filter((t) => !ids.has(t.id))];
         });
       } catch (error) {
         Alert.alert('Network Error', error.message || 'Could not load transactions for that range.');
@@ -305,14 +308,14 @@ export default function TransactionHistory({ navigate, user }) {
 
       <View style={styles.body}>
         {loading ? (
-          <ActivityIndicator color={BRAND} style={styles.loader} />
+          <LogoLoader centered />
         ) : (
           <ScrollView
             style={styles.scrollFlex}
             contentContainerStyle={styles.list}
             showsVerticalScrollIndicator={false}
             refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={() => loadTransactions({ isRefresh: true })} tintColor={BRAND} />
+              <RefreshControl refreshing={refreshing} onRefresh={() => refetchTransactions()} tintColor={BRAND} />
             }
           >
             {customLoading ? (

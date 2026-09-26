@@ -41,11 +41,11 @@ const COLORS = {
 };
 
 const FONTS = {
-  regular: 'Manrope_400Regular',
-  medium: 'Manrope_500Medium',
-  semibold: 'Manrope_600SemiBold',
-  bold: 'Manrope_700Bold',
-  extrabold: 'Manrope_800ExtraBold',
+  regular: 'Montserrat_400Regular',
+  medium: 'Montserrat_500Medium',
+  semibold: 'Montserrat_600SemiBold',
+  bold: 'Montserrat_700Bold',
+  extrabold: 'Montserrat_800ExtraBold',
 };
 
 function FormInput({
@@ -381,6 +381,7 @@ export default function SignupScreen({ navigate }) {
           <Text style={styles.heading}>Get started with Megasub</Text>
           <Text style={styles.subheading}>Enjoy seamless services on signing up</Text>
 
+          {/* Continue with Google — temporarily disabled, see signup.jsx handleGoogle().
           <TouchableOpacity
             style={styles.googleBtn}
             onPress={handleGoogle}
@@ -402,15 +403,11 @@ export default function SignupScreen({ navigate }) {
               </>
             )}
           </TouchableOpacity>
-
-          <View style={styles.dividerRow}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or sign up with email</Text>
-            <View style={styles.dividerLine} />
-          </View>
+          */}
         </View>
 
         <ScrollView
+          style={styles.scrollView}
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }, column]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -419,7 +416,7 @@ export default function SignupScreen({ navigate }) {
             <View style={styles.nameField}>
               <FormInput
                 label="First Name"
-                placeholder="John"
+                placeholder="Folake"
                 value={firstName}
                 onChangeText={setFirstName}
                 autoCapitalize="words"
@@ -431,7 +428,7 @@ export default function SignupScreen({ navigate }) {
             <View style={styles.nameField}>
               <FormInput
                 label="Last Name"
-                placeholder="Doe"
+                placeholder="Adebayo"
                 value={lastName}
                 onChangeText={setLastName}
                 autoCapitalize="words"
@@ -443,7 +440,7 @@ export default function SignupScreen({ navigate }) {
 
           <FormInput
             label="Username"
-            placeholder="johndoe123"
+            placeholder="folake123"
             value={username}
             onChangeText={setUsername}
             error={errors.username}
@@ -452,7 +449,7 @@ export default function SignupScreen({ navigate }) {
 
           <FormInput
             label="Email Address"
-            placeholder="john@example.com"
+            placeholder="folake@example.com"
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -537,6 +534,9 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 24,
+  },
+  scrollView: {
+    flex: 1,
   },
   scroll: {
     paddingHorizontal: 24,

@@ -26,9 +26,9 @@ export const DARK_COLORS = {
   // and was previously '#000000' too, making all of those invisible.
   cardAlt: 'rgba(108,118,245,0.14)',
   border: '#262943',
-  text: '#F5F6FA',
-  textMuted: 'rgba(245,246,250,0.55)',
-  textFaint: 'rgba(245,246,250,0.4)',
+  text: '#FFFFFF',
+  textMuted: '#FFFFFF',
+  textFaint: '#FFFFFF',
   divider: 'rgba(245,246,250,0.08)',
   brand: '#6C76F5',
   statusBarStyle: 'light-content',

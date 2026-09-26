@@ -6,15 +6,12 @@ import {
   FlatList,
 } from 'react-native';
 import { useResponsive } from '../../../lib/responsive';
+import { SLIDE_SOURCES } from '../../../lib/preloadSlides';
 
 // Matches WalletCard's wrapper paddingHorizontal so the slide spans the same width
 const PADDING = 16;
 
-const SLIDES = [
-  { id: '1', source: require('../../../assets/slide-glo.png') },
-  { id: '2', source: require('../../../assets/slide-mtn.png') },
-  { id: '3', source: require('../../../assets/slide-airtel.png') },
-];
+const SLIDES = SLIDE_SOURCES.map((source, index) => ({ id: String(index + 1), source }));
 
 export default function Slide() {
   // A page must be exactly as wide as the column it sits in, or paging snaps

@@ -1,5 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetchDashboard, fetchNetworks, fetchProducts, fetchTransactions } from './api';
+import {
+  fetchDashboard,
+  fetchNetworks,
+  fetchProducts,
+  fetchTransactions,
+  fetchProductPlanCategories,
+  fetchProductPlans,
+} from './api';
 
 // Every server dataset the app shows lives under one of these keys, in the
 // one shared queryClient (lib/queryClient.js). lib/warmup.js prefetches
@@ -23,6 +30,10 @@ export const queryKeys = {
   networks: (userId) => ['networks', userId],
   products: (userId) => ['products', userId],
   transactions: (userId, dateFrom, dateTo) => ['transactions', userId, dateFrom ?? '', dateTo ?? ''],
+  // Cable/Electricity both fetch a fixed (network-independent) category+plan
+  // catalog for one productSlug — one shared shape for both instead of a
+  // bespoke query per screen.
+  catalog: (userId, productSlug) => ['catalog', userId, productSlug],
 };
 
 // /dashboard's top-level `data` carries stale/blank profile fields — the
@@ -55,6 +66,27 @@ export function useProductsQuery(userId) {
     enabled: !!userId,
     staleTime: STALE_TIMES.products,
     select: (json) => json?.data ?? [],
+  });
+}
+
+// Shared by Cable.js ('cable_subscription') and Electricity.js
+// ('utility_bills') — both fetch a categories+plans pair that doesn't
+// depend on a selected network, unlike Airtime/Data/Bulk. extraParams
+// (e.g. Electricity's { amount: 100 } placeholder) isn't part of the query
+// key since it doesn't change what's cached, just what the catalog call
+// needs to not 403.
+export function useCatalogQuery(userId, productSlug, extraParams = {}) {
+  return useQuery({
+    queryKey: queryKeys.catalog(userId, productSlug),
+    queryFn: async () => {
+      const [categoriesJson, plansJson] = await Promise.all([
+        fetchProductPlanCategories({ userId, productSlug }),
+        fetchProductPlans({ userId, productSlug, ...extraParams }),
+      ]);
+      return { categories: categoriesJson.data || [], plans: plansJson.data || [] };
+    },
+    enabled: !!userId,
+    staleTime: STALE_TIMES.products,
   });
 }
 

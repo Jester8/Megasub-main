@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { fetchNetworks, fetchProductPlanCategories, fetchProductPlans, buyData } from '../../../lib/api';
+import { fetchProductPlanCategories, fetchProductPlans, buyData } from '../../../lib/api';
+import { useNetworksQuery } from '../../../lib/queries';
 import { requireNetworkOrShowError } from '../../../lib/network';
 import { useTheme } from '../../../contexts/ThemeContext';
 import CategoryTabs from '../components/CategoryTabs';
@@ -22,15 +23,15 @@ import SuccessView from '../components/SuccessView';
 import ContactPicker from '../components/ContactPicker';
 import WrongPinModal from '../components/WrongPinModal';
 import { detectNetworkFromPhone, findNetworkByLabel } from '../../../lib/networkDetect';
-import { formatNaira, alertForPurchaseError, stripNetworkPrefix } from '../../../lib/format';
+import { formatNaira, alertForPurchaseError, stripNetworkPrefix, formatPlanTitle } from '../../../lib/format';
 import CouponCheck from '../components/CouponCheck';
 
 const FONTS = {
-  regular: 'Manrope_400Regular',
-  medium: 'Manrope_500Medium',
-  semibold: 'Manrope_600SemiBold',
-  bold: 'Manrope_700Bold',
-  extrabold: 'Manrope_800ExtraBold',
+  regular: 'Montserrat_400Regular',
+  medium: 'Montserrat_500Medium',
+  semibold: 'Montserrat_600SemiBold',
+  bold: 'Montserrat_700Bold',
+  extrabold: 'Montserrat_800ExtraBold',
 };
 
 const BRAND = '#4A55DD';
@@ -124,8 +125,7 @@ export default function Data({ navigate, user }) {
   const { colors } = useTheme();
   const [step, setStep] = useState('input');
 
-  const [networks, setNetworks] = useState([]);
-  const [loadingNetworks, setLoadingNetworks] = useState(true);
+  const { data: networks = [], isLoading: loadingNetworks } = useNetworksQuery(user?.id);
   const [categories, setCategories] = useState([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [plans, setPlans] = useState([]);
@@ -144,28 +144,12 @@ export default function Data({ navigate, user }) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    loadNetworks();
-  }, []);
-
-  useEffect(() => {
     if (selectedNetwork) loadCategories(selectedNetwork.id);
   }, [selectedNetwork]);
 
   useEffect(() => {
     if (selectedNetwork && selectedCategory) loadPlans(selectedNetwork.id, selectedCategory.id);
   }, [selectedCategory]);
-
-  const loadNetworks = async () => {
-    setLoadingNetworks(true);
-    try {
-      const json = await fetchNetworks(user?.id);
-      setNetworks(json.data || []);
-    } catch (error) {
-      Alert.alert('Network Error', error.message || 'Could not load networks.');
-    } finally {
-      setLoadingNetworks(false);
-    }
-  };
 
   const loadCategories = async (networkId) => {
     setLoadingCategories(true);
@@ -174,7 +158,9 @@ export default function Data({ navigate, user }) {
     setSelectedPlan(null);
     try {
       const json = await fetchProductPlanCategories({ userId: user?.id, productSlug: 'data', networkId });
-      setCategories(json.data || []);
+      // CG (Corporate Gifting) isn't offered — hide it rather than let
+      // users pick a data type that isn't actually usable.
+      setCategories((json.data || []).filter((c) => !/\bCG\b/i.test(c.product_plan_category_name)));
     } catch (error) {
       Alert.alert('Network Error', error.message || 'Could not load data categories.');
     } finally {
@@ -380,7 +366,7 @@ export default function Data({ navigate, user }) {
                       plans={plans.map((p) => ({
                         id: p.product_plan_id,
                         meta: `${p.validity_in_days} days`,
-                        title: p.product_plan_name,
+                        title: formatPlanTitle(p.product_plan_name),
                         price: p.selling_price,
                         badge: selectedCategory.product_plan_category_name,
                       }))}

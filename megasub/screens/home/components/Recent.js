@@ -1,23 +1,23 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
 } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useResponsive } from '../../../lib/responsive';
-import { fetchTransactions } from '../../../lib/api';
+import { useTransactionsQuery } from '../../../lib/queries';
 import { CATEGORY_STYLE, DEFAULT_STYLE, formatDateShort, toDateParam } from '../../../lib/transactionMeta';
 import ReceiptModal from './ReceiptModal';
 
+import LogoLoader from './LogoLoader';
 const FONTS = {
-  regular: 'Manrope_400Regular',
-  medium: 'Manrope_500Medium',
-  semibold: 'Manrope_600SemiBold',
-  bold: 'Manrope_700Bold',
+  regular: 'Montserrat_400Regular',
+  medium: 'Montserrat_500Medium',
+  semibold: 'Montserrat_600SemiBold',
+  bold: 'Montserrat_700Bold',
 };
 
 const PADDING = 20;
@@ -45,60 +45,62 @@ function TransactionItem({ tx, colors, onPress, isTablet }) {
 export default function RecentTransactions({ user, onSeeAllPress, refreshSignal }) {
   const { colors } = useTheme();
   const { isTablet } = useResponsive();
-  const [transactions, setTransactions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [selectedTx, setSelectedTx] = useState(null);
 
+  // Stable window, computed once — this is also the exact window
+  // lib/warmup.js prefetches right after login, so a returning user's cache
+  // is already warm by the time Home mounts: last-seen transactions render
+  // immediately instead of behind a blocking spinner.
+  const [{ dateFrom, dateTo }] = useState(() => {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - WINDOW_DAYS);
+    return { dateFrom: toDateParam(from), dateTo: toDateParam(to) };
+  });
+
+  const {
+    data: fetchedTransactions = [],
+    isLoading: loading,
+    isError,
+    error: queryError,
+    refetch,
+  } = useTransactionsQuery(user?.id, { dateFrom, dateTo });
+
+  const error = isError ? (queryError?.message || 'Could not load your transactions.') : null;
+
+  const transactions = useMemo(
+    () =>
+      [...fetchedTransactions]
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, VISIBLE_COUNT),
+    [fetchedTransactions]
+  );
+
+  // A purchase elsewhere in the app bumps refreshSignal — that's the cue to
+  // pull the latest total in the background; cached data keeps showing the
+  // whole time instead of flashing back to a loading state. Skips the very
+  // first mount, where useTransactionsQuery already fetches on its own.
+  const isFirstRender = useRef(true);
   useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const dateTo = new Date();
-        const dateFrom = new Date();
-        dateFrom.setDate(dateFrom.getDate() - WINDOW_DAYS);
-
-        const json = await fetchTransactions({
-          userId: user?.id,
-          dateFrom: toDateParam(dateFrom),
-          dateTo: toDateParam(dateTo),
-        });
-
-        if (cancelled) return;
-        const list = [...(json.data || [])]
-          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-          .slice(0, VISIBLE_COUNT);
-        setTransactions(list);
-      } catch (err) {
-        if (!cancelled) setError(err.message || 'Could not load your transactions.');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
     }
-
-    if (user?.id) load();
-    else setLoading(false);
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id, refreshSignal]);
+    if (user?.id) refetch();
+  }, [refreshSignal]);
 
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Transactions</Text>
         <TouchableOpacity onPress={onSeeAllPress}>
-          <Text style={styles.seeAll}>See all</Text>
+          <Text style={[styles.seeAll, colors.mode === 'dark' && { color: '#FFFFFF' }]}>See all</Text>
         </TouchableOpacity>
       </View>
 
       <View style={[styles.card, { backgroundColor: colors.card }]}>
         {loading ? (
-          <ActivityIndicator color="#4A55DD" style={styles.loader} />
+          <LogoLoader size={44} />
         ) : error ? (
           <View style={styles.emptyState}>
             <Feather name="wifi-off" size={28} color="#B7BCEF" />

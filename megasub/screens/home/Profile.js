@@ -12,26 +12,30 @@ import {
   Modal,
   Pressable,
   Platform,
+  KeyboardAvoidingView,
+  Linking,
 } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
 import BottomNav from './components/BottomNav';
 import { useTheme } from '../../contexts/ThemeContext';
-import { clearCachedVirtualAccounts, deleteAccount, updateFingerprintOption } from '../../lib/api';
+import { clearCachedVirtualAccounts, deleteAccount, updateFingerprintOption, fetchKycStatus } from '../../lib/api';
 
 const BIOMETRIC_LABEL = Platform.OS === 'ios' ? 'Face ID' : 'Fingerprint';
 
 const FONTS = {
-  regular: 'Manrope_400Regular',
-  medium: 'Manrope_500Medium',
-  semibold: 'Manrope_600SemiBold',
-  bold: 'Manrope_700Bold',
-  extrabold: 'Manrope_800ExtraBold',
+  regular: 'Montserrat_400Regular',
+  medium: 'Montserrat_500Medium',
+  semibold: 'Montserrat_600SemiBold',
+  bold: 'Montserrat_700Bold',
+  extrabold: 'Montserrat_800ExtraBold',
 };
 
 const BRAND = '#4A55DD';
+const PLAY_STORE_ID = 'com.anonymous.megasub';
 const SESSION_KEY = 'megasub_session_token';
 const USER_KEY = 'megasub_user_data';
 const BIOMETRIC_KEY = 'megasub_biometric_enabled';
@@ -74,6 +78,17 @@ export default function Profile({ navigate, user }) {
   const isGoogleAccount = user?.auth_provider === 'google';
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(true);
+  // BVN verification state from the server: true / false, or null until it is known.
+  const [kycVerified, setKycVerified] = useState(null);
+
+  useEffect(() => {
+    fetchKycStatus()
+      .then((json) => {
+        const data = json?.data || {};
+        setKycVerified(data.verified === true || data.status === 'verified');
+      })
+      .catch(() => setKycVerified(null));
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -129,15 +144,21 @@ export default function Profile({ navigate, user }) {
     'Guest User';
   const contact = user?.email || user?.phone_number || 'Not set';
 
-  const getInitials = () => {
-    if (user?.first_name && user?.last_name) return `${user.first_name.charAt(0)}${user.last_name.charAt(0)}`;
-    if (user?.first_name) return user.first_name.charAt(0);
-    if (user?.username) return user.username.charAt(0);
-    return 'U';
-  };
-
-  const handleRateApp = () => {
-    Alert.alert('Rate Megasub', "Thanks for the love! We'll open the store listing once the app is live there.");
+  // Opens the Play Store listing: the store app first, then the web page if no
+  // store app can handle the link. The App Store listing isn't linked yet, so
+  // iOS keeps the friendly message.
+  const handleRateApp = async () => {
+    if (Platform.OS !== 'android') {
+      Alert.alert('Rate Megasub', "Thanks for the love! We'll link the App Store listing here soon.");
+      return;
+    }
+    try {
+      await Linking.openURL(`market://details?id=${PLAY_STORE_ID}`);
+    } catch (e) {
+      Linking.openURL(`https://play.google.com/store/apps/details?id=${PLAY_STORE_ID}`).catch(() =>
+        Alert.alert('Rate Megasub', 'Could not open the Play Store. Please try again.')
+      );
+    }
   };
 
   const handleLogout = () => {
@@ -205,9 +226,9 @@ export default function Profile({ navigate, user }) {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={[styles.profileCard, { backgroundColor: colors.card }]}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{getInitials()}</Text>
-          </View>
+          <LinearGradient colors={['#7C3AED', '#4A55DD']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatar}>
+            <Ionicons name="person" size={28} color="#FFFFFF" />
+          </LinearGradient>
           <View style={{ flex: 1 }}>
             <Text style={[styles.profileName, { color: colors.text }]}>{displayName}</Text>
             <Text style={[styles.profileContact, { color: colors.textMuted }]}>{contact}</Text>
@@ -262,7 +283,7 @@ export default function Profile({ navigate, user }) {
             color="#10B981"
             bg="rgba(16,185,129,0.1)"
             label="KYC Verification"
-            value={user?.kyc_status === 'verified' ? 'Verified' : 'Pending'}
+            value={kycVerified === null ? '' : kycVerified ? 'Verified' : 'Not verified'}
             colors={colors}
             onPress={() => navigate && navigate('kyc')}
           />
@@ -382,9 +403,14 @@ export default function Profile({ navigate, user }) {
         transparent
         onRequestClose={() => setDeleteModalVisible(false)}
       >
-        <View style={styles.overlay}>
+        <KeyboardAvoidingView style={styles.overlay} behavior="padding">
           <Pressable style={styles.overlayTouch} onPress={() => setDeleteModalVisible(false)} />
-          <View style={[styles.sheet, { backgroundColor: colors.card }]}>
+          <ScrollView
+            style={[styles.sheetScroll, { backgroundColor: colors.card }]}
+            contentContainerStyle={styles.sheet}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
             <View style={[styles.sheetHandle, { backgroundColor: colors.divider }]} />
             <View style={styles.deleteIconWrap}>
               <Ionicons name="warning-outline" size={30} color="#EF4444" />
@@ -444,8 +470,8 @@ export default function Profile({ navigate, user }) {
             >
               <Text style={[styles.cancelBtnText, { color: colors.textMuted }]}>Cancel</Text>
             </TouchableOpacity>
-          </View>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -466,10 +492,9 @@ const styles = StyleSheet.create({
     borderRadius: 20, padding: 16, marginBottom: 24, gap: 14,
   },
   avatar: {
-    width: 56, height: 56, borderRadius: 28, backgroundColor: BRAND,
+    width: 56, height: 56, borderRadius: 28,
     alignItems: 'center', justifyContent: 'center',
   },
-  avatarText: { fontFamily: FONTS.extrabold, fontWeight: '800', fontSize: 20, color: '#FFFFFF', textTransform: 'uppercase' },
   profileName: { fontFamily: FONTS.bold, fontSize: 15.5, marginBottom: 3 },
   profileContact: { fontFamily: FONTS.regular, fontSize: 12.5 },
 
@@ -487,9 +512,8 @@ const styles = StyleSheet.create({
 
   overlay: { flex: 1, backgroundColor: 'rgba(11,13,26,0.4)' },
   overlayTouch: { flex: 1 },
+  sheetScroll: { flexGrow: 0, maxHeight: '92%', borderTopLeftRadius: 28, borderTopRightRadius: 28 },
   sheet: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
     paddingTop: 10,
     paddingHorizontal: 24,
     paddingBottom: 30,

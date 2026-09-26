@@ -50,11 +50,11 @@ const COLORS = {
 };
 
 const FONTS = {
-  regular: 'Manrope_400Regular',
-  medium: 'Manrope_500Medium',
-  semibold: 'Manrope_600SemiBold',
-  bold: 'Manrope_700Bold',
-  extrabold: 'Manrope_800ExtraBold',
+  regular: 'Montserrat_400Regular',
+  medium: 'Montserrat_500Medium',
+  semibold: 'Montserrat_600SemiBold',
+  bold: 'Montserrat_700Bold',
+  extrabold: 'Montserrat_800ExtraBold',
 };
 
 // ─── Reusable Input ───────────────────────────────────────────────
@@ -437,6 +437,7 @@ export default function LoginScreen({ navigate }) {
             Log in to continue where you left off
           </Text>
 
+          {/* Continue with Google — temporarily disabled, see login.jsx handleGoogle().
           <TouchableOpacity
             style={styles.googleBtn}
             onPress={handleGoogle}
@@ -458,16 +459,11 @@ export default function LoginScreen({ navigate }) {
               </>
             )}
           </TouchableOpacity>
-
-          <View style={styles.dividerRow}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or log in with email, username, or phone</Text>
-            <View style={styles.dividerLine} />
-          </View>
+          */}
 
           <FormInput
             label="Email, Username, or Phone"
-            placeholder="john@example.com"
+            placeholder="folake@example.com"
             value={identifier}
             onChangeText={setIdentifier}
             autoCapitalize="none"

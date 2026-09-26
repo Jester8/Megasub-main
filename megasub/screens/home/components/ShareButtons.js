@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 
-const FONTS = { semibold: 'Manrope_600SemiBold' };
+const FONTS = { semibold: 'Montserrat_600SemiBold' };
 const BRAND = '#4A55DD';
 
 // PDF export used to just wrap the same receipt screenshot in an HTML/PDF

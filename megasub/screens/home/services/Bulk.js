@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { fetchNetworks, fetchProductPlanCategories, fetchProductPlans, buyAirtime } from '../../../lib/api';
+import { fetchProductPlanCategories, fetchProductPlans, buyAirtime } from '../../../lib/api';
+import { useNetworksQuery } from '../../../lib/queries';
 import { requireNetworkOrShowError } from '../../../lib/network';
 import { useTheme } from '../../../contexts/ThemeContext';
 import CategoryTabs from '../components/CategoryTabs';
@@ -24,11 +25,11 @@ import WrongPinModal from '../components/WrongPinModal';
 import { formatNaira, alertForPurchaseError, stripNetworkPrefix, sanitizePositiveInt } from '../../../lib/format';
 
 const FONTS = {
-  regular: 'Manrope_400Regular',
-  medium: 'Manrope_500Medium',
-  semibold: 'Manrope_600SemiBold',
-  bold: 'Manrope_700Bold',
-  extrabold: 'Manrope_800ExtraBold',
+  regular: 'Montserrat_400Regular',
+  medium: 'Montserrat_500Medium',
+  semibold: 'Montserrat_600SemiBold',
+  bold: 'Montserrat_700Bold',
+  extrabold: 'Montserrat_800ExtraBold',
 };
 
 const BRAND = '#4A55DD';
@@ -131,8 +132,7 @@ export default function Bulk({ navigate, user }) {
 
   const [step, setStep] = useState('input');
 
-  const [networks, setNetworks] = useState([]);
-  const [loadingNetworks, setLoadingNetworks] = useState(true);
+  const { data: networks = [], isLoading: loadingNetworks } = useNetworksQuery(user?.id);
   const [categories, setCategories] = useState([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [plans, setPlans] = useState([]);
@@ -151,8 +151,8 @@ export default function Bulk({ navigate, user }) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    loadNetworks();
-  }, []);
+    if (!selectedNetwork && networks.length > 0) setSelectedNetwork(networks[0]);
+  }, [networks]);
 
   useEffect(() => {
     if (selectedNetwork) loadCategories(selectedNetwork.id);
@@ -161,20 +161,6 @@ export default function Bulk({ navigate, user }) {
   useEffect(() => {
     if (selectedNetwork && selectedCategory) loadPlans(selectedNetwork.id, selectedCategory.id);
   }, [selectedCategory]);
-
-  const loadNetworks = async () => {
-    setLoadingNetworks(true);
-    try {
-      const json = await fetchNetworks(user?.id);
-      const list = json.data || [];
-      setNetworks(list);
-      if (list.length > 0) setSelectedNetwork(list[0]);
-    } catch (error) {
-      Alert.alert('Network Error', error.message || 'Could not load networks.');
-    } finally {
-      setLoadingNetworks(false);
-    }
-  };
 
   const loadCategories = async (networkId) => {
     setLoadingCategories(true);
@@ -368,7 +354,17 @@ export default function Bulk({ navigate, user }) {
               {recipients.length} number{recipients.length === 1 ? '' : 's'}
             </Text>
           </View>
-          <View style={[styles.textAreaCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+
+          <TouchableOpacity
+            style={[styles.pickContactsBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+            activeOpacity={0.8}
+            onPress={() => setContactPickerVisible(true)}
+          >
+            <Feather name="user-plus" size={16} color={BRAND} />
+            <Text style={styles.pickContactsText}>Pick from Contacts</Text>
+          </TouchableOpacity>
+
+          <View style={[styles.textAreaCard, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 12 }]}>
             <TextInput
               style={[styles.textArea, { color: colors.text }]}
               placeholder={'One number per line, e.g.\n08168509044\n09060627548\n09011988807'}
@@ -387,15 +383,6 @@ export default function Bulk({ navigate, user }) {
               Fix {invalidRecipients.length === 1 ? 'this number' : 'these numbers'}: {invalidRecipients.join(', ')}
             </Text>
           )}
-
-          <TouchableOpacity
-            style={[styles.pickContactsBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
-            activeOpacity={0.8}
-            onPress={() => setContactPickerVisible(true)}
-          >
-            <Feather name="user-plus" size={16} color={BRAND} />
-            <Text style={styles.pickContactsText}>Pick from Contacts</Text>
-          </TouchableOpacity>
 
           <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Amount (per recipient)</Text>
           <View style={[styles.inputCard, { backgroundColor: colors.card, borderColor: colors.border }]}>

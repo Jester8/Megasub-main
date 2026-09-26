@@ -3,9 +3,9 @@ import { View, Text, Image, TouchableOpacity, StyleSheet, ScrollView } from 'rea
 import { Feather } from '@expo/vector-icons';
 
 const FONTS = {
-  regular: 'Manrope_400Regular',
-  semibold: 'Manrope_600SemiBold',
-  bold: 'Manrope_700Bold',
+  regular: 'Montserrat_400Regular',
+  semibold: 'Montserrat_600SemiBold',
+  bold: 'Montserrat_700Bold',
 };
 
 // Selectable option list — vertical (default, full-width rows with a radio

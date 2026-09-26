@@ -9,6 +9,7 @@ import {
 import WelcomeHeader from './components/WelcomeHeader';
 import WalletCard from './components/Walletcard';
 import Slide from './components/Slides';
+import KycBanner from './components/KycBanner';
 import ServicesGrid from './components/Servicesgrid';
 import RecentTransactions from './components/Recent';
 import BottomNav from './components/BottomNav';
@@ -67,6 +68,7 @@ export default function HomeScreen({ navigate, user, onRefreshWallet }) {
           }
         >
           <WalletCard userData={user} onTopUp={handleTopUp} />
+          <KycBanner navigate={navigate} refreshSignal={refreshSignal} />
           <Slide />
           <ServicesGrid navigate={navigate} onSeeAllPress={handleSeeAllServices} />
           <RecentTransactions user={user} onSeeAllPress={handleSeeAllTransactions} refreshSignal={refreshSignal} />
