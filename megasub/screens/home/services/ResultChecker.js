@@ -563,7 +563,7 @@ const styles = StyleSheet.create({
 
   successHeader: { alignItems: 'center', paddingVertical: 20 },
   successIconWrap: { marginBottom: 14 },
-  successTitle: { fontFamily: FONTS.extrabold, fontWeight: '800', fontSize: 20, marginBottom: 6 },
+  successTitle: { fontFamily: FONTS.extrabold, fontSize: 20, marginBottom: 6 },
   successSubtitle: { fontFamily: FONTS.medium, fontSize: 13, textAlign: 'center', paddingHorizontal: 20 },
   emptyPinsText: { fontFamily: FONTS.medium, fontSize: 13, textAlign: 'center', marginTop: 20, paddingHorizontal: 20 },
 

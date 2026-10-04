@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 14,
   },
-  headerTitle: { fontFamily: FONTS.extrabold, fontWeight: '800', fontSize: 20, color: '#0B0D1A' },
+  headerTitle: { fontFamily: FONTS.extrabold, fontSize: 20, color: '#0B0D1A' },
 
   scrollContent: { paddingHorizontal: 20, paddingBottom: 30 },
 

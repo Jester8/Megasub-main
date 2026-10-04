@@ -64,12 +64,16 @@ export default function App() {
   // Every screen names its fontFamily explicitly, so the fonts must be
   // registered before the first screen renders. A load error falls back to the
   // system font rather than blocking the app.
+  //
+  // Bold and extra-bold looked too heavy, so each heavy name is registered with
+  // the next lighter file: "700Bold" renders SemiBold and "800ExtraBold"
+  // renders Bold. Screens keep their font names; only the weights change.
   const [fontsLoaded, fontError] = useFonts({
     Montserrat_400Regular,
     Montserrat_500Medium,
     Montserrat_600SemiBold,
-    Montserrat_700Bold,
-    Montserrat_800ExtraBold,
+    Montserrat_700Bold: Montserrat_600SemiBold,
+    Montserrat_800ExtraBold: Montserrat_700Bold,
   });
   // The home slider images are warmed up behind the boot loader so the slider
   // is already there when Home first renders.

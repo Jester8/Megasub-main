@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(74,85,221,0.08)',
     alignItems: 'center', justifyContent: 'center', marginBottom: 24,
   },
-  title: { fontFamily: FONTS.extrabold, fontWeight: '800', fontSize: 22, color: '#0B0D1A', marginBottom: 8 },
+  title: { fontFamily: FONTS.extrabold, fontSize: 22, color: '#0B0D1A', marginBottom: 8 },
   subtitle: {
     fontFamily: FONTS.regular, fontSize: 13.5, color: 'rgba(11,13,26,0.5)',
     textAlign: 'center', lineHeight: 20, marginBottom: 32, paddingHorizontal: 12,

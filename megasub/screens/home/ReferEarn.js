@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', marginBottom: 14,
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
   },
-  heroTitle: { fontFamily: FONTS.extrabold, fontWeight: '800', fontSize: 17, color: '#FFFFFF', textAlign: 'center', marginBottom: 8 },
+  heroTitle: { fontFamily: FONTS.extrabold, fontSize: 17, color: '#FFFFFF', textAlign: 'center', marginBottom: 8 },
   heroSub: { fontFamily: FONTS.regular, fontSize: 12.5, color: 'rgba(255,255,255,0.8)', textAlign: 'center', lineHeight: 18 },
 
   codeCard: {
@@ -191,7 +191,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF', borderRadius: 16, paddingHorizontal: 16, height: 56,
     borderWidth: 1.5, borderColor: '#ECEDF6', borderStyle: 'dashed',
   },
-  codeText: { flex: 1, fontFamily: FONTS.extrabold, fontWeight: '800', fontSize: 16, letterSpacing: 1, marginRight: 10 },
+  codeText: { flex: 1, fontFamily: FONTS.extrabold, fontSize: 16, letterSpacing: 1, marginRight: 10 },
   copyBtn: { padding: 4 },
   hintText: { fontFamily: FONTS.regular, fontSize: 11.5, marginTop: 8, lineHeight: 16 },
 

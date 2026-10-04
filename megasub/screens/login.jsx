@@ -380,7 +380,7 @@ export default function LoginScreen({ navigate }) {
       console.log('✅ Login successful! Moving to dashboard home screen.');
       await clearSignupStep();
       navigate && navigate('home', userData);
-      
+
     } catch (err) {
       console.error('❌ Network Error:', err);
       Alert.alert('Network Error', 'Could not connect to the server. Check your connection and try again.');
@@ -576,7 +576,7 @@ const styles = StyleSheet.create({
   },
   heading: {
     fontFamily: FONTS.bold,
-    fontWeight: '600',
+
     fontSize: 27,
     color: COLORS.text,
     textAlign: 'center',

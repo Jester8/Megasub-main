@@ -732,7 +732,7 @@ const styles = StyleSheet.create({
   },
   heading: {
     fontFamily: FONTS.bold,
-    fontWeight: '600',
+
     fontSize: 27,
     color: COLORS.text,
     textAlign: 'center',

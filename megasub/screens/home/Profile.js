@@ -483,7 +483,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 14,
   },
-  headerTitle: { fontFamily: FONTS.extrabold, fontWeight: '800', fontSize: 20 },
+  headerTitle: { fontFamily: FONTS.extrabold, fontSize: 20 },
 
   scrollContent: { paddingHorizontal: 20, paddingBottom: 30 },
 
@@ -530,7 +530,7 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     fontFamily: FONTS.extrabold,
-    fontWeight: '800',
+
     fontSize: 18,
     marginBottom: 10,
   },

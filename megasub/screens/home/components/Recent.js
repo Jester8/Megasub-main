@@ -22,8 +22,7 @@ const FONTS = {
 
 const PADDING = 20;
 const CARD_PADDING = 16;
-const VISIBLE_COUNT = 4;
-const WINDOW_DAYS = 30;
+const WINDOW_DAYS = 62;
 
 function TransactionItem({ tx, colors, onPress, isTablet }) {
   const visual = CATEGORY_STYLE[tx.transaction_category] || DEFAULT_STYLE;
@@ -70,9 +69,9 @@ export default function RecentTransactions({ user, onSeeAllPress, refreshSignal 
 
   const transactions = useMemo(
     () =>
-      [...fetchedTransactions]
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        .slice(0, VISIBLE_COUNT),
+      [...fetchedTransactions].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      ),
     [fetchedTransactions]
   );
 

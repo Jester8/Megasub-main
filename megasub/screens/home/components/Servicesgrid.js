@@ -9,10 +9,10 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useResponsive } from '../../../lib/responsive';
-import { HOME_SERVICES, SERVICE_SCREENS } from '../servicesConfig';
+import { SERVICES, HOME_SERVICES, SERVICE_SCREENS } from '../servicesConfig';
 
 const PADDING = 20;
-const CARD_PADDING = 14;
+const CARD_PADDING = 12;
 const GAP = 6;
 const COLUMNS = 4;
 
@@ -37,14 +37,23 @@ function ServiceItem({ service, onPress, itemSize, iconSize, textColor }) {
   );
 }
 
-export default function ServicesGrid({ navigate, onServicePress, onSeeAllPress }) {
+// Services laid out four to a card, with a gap between cards. Shared by Home
+// (the first eight, with a "See all" link) and the "See all" page (every
+// service).
+function chunk(list, size) {
+  const out = [];
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+  return out;
+}
+
+export function ServiceGrid({ services, navigate, onServicePress, onSeeAllPress, showSeeAll = false }) {
   const { colors } = useTheme();
   // Columns are measured against the capped content column, not the screen,
   // or the four items spread across the whole tablet with the icons marooned
   // in the middle of each cell.
   const { isTablet, contentWidth } = useResponsive();
   const isCompact = contentWidth < 360;
-  const iconSize = isCompact || isTablet ? 44 : 52;
+  const iconSize = isCompact || isTablet ? 44 : 48;
   const itemSize = (contentWidth - PADDING * 2 - CARD_PADDING * 2 - GAP * (COLUMNS - 1)) / COLUMNS;
 
   const handlePress = (service) => {
@@ -60,45 +69,68 @@ export default function ServicesGrid({ navigate, onServicePress, onSeeAllPress }
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Services</Text>
-        <TouchableOpacity onPress={onSeeAllPress}>
-          <Text style={[styles.seeAll, colors.mode === 'dark' && { color: '#FFFFFF' }]}>See all</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={[styles.card, { backgroundColor: colors.cardAlt }, Platform.OS === 'android' && { backgroundColor: colors.card }]}>
-        <View style={styles.grid}>
-          {HOME_SERVICES.map((s) => (
-            <ServiceItem key={s.id} service={s} onPress={handlePress} itemSize={itemSize} iconSize={iconSize} textColor={colors.text} />
-          ))}
+      {showSeeAll ? (
+        <View style={styles.headerRow}>
+          <TouchableOpacity onPress={onSeeAllPress}>
+            <Text style={[styles.seeAll, colors.mode === 'dark' && { color: '#FFFFFF' }]}>See all services</Text>
+          </TouchableOpacity>
         </View>
-      </View>
+      ) : null}
+
+      {chunk(services, COLUMNS).map((row, i) => (
+        <View
+          key={i}
+          style={[
+            styles.card,
+            { backgroundColor: colors.cardAlt },
+            Platform.OS === 'android' && { backgroundColor: colors.card },
+            i > 0 && styles.cardGap,
+          ]}
+        >
+          <View style={styles.grid}>
+            {row.map((s) => (
+              <ServiceItem key={s.id} service={s} onPress={handlePress} itemSize={itemSize} iconSize={iconSize} textColor={colors.text} />
+            ))}
+          </View>
+        </View>
+      ))}
     </View>
+  );
+}
+
+export function AllServicesGrid({ navigate }) {
+  return <ServiceGrid services={SERVICES} navigate={navigate} />;
+}
+
+export default function ServicesGrid({ navigate, onServicePress, onSeeAllPress }) {
+  return (
+    <ServiceGrid
+      services={HOME_SERVICES}
+      navigate={navigate}
+      onServicePress={onServicePress}
+      onSeeAllPress={onSeeAllPress}
+      showSeeAll
+    />
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: PADDING,
-    marginTop: 16,
+    marginTop: 6,
   },
   headerRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
-    marginBottom: 10,
-  },
-  sectionTitle: {
-    fontFamily: FONTS.bold,
-    fontSize: 17,
-    color: '#0B0D1A',
+    marginBottom: 6,
   },
   seeAll: {
     fontFamily: FONTS.semibold,
     fontSize: 13,
     color: '#4A55DD',
   },
+  cardGap: { marginTop: 14 },
   card: {
     borderRadius: 20,
     padding: CARD_PADDING,
@@ -120,7 +152,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontFamily: FONTS.bold,
-    fontWeight: '700',
+
     fontSize: 11,
     color: '#0B0D1A',
     textAlign: 'center',

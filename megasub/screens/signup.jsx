@@ -237,7 +237,7 @@ export default function SignupScreen({ navigate }) {
             errorMessages.push(`${field}: ${messages}`);
           }
         });
-        
+
         const errorMessage = errorMessages.join('\n');
         Alert.alert('Validation Error', errorMessage);
         console.log('❌ Validation errors:', errorMessages);
@@ -312,7 +312,7 @@ export default function SignupScreen({ navigate }) {
       // unverified), then the existing phone-verification/PIN step follows.
       console.log('✅ Registration successful! Navigating to email verification with user data...');
       navigate && navigate('email-verify', userData);
-      
+
     } catch (err) {
       console.error('❌ Network Error:', err);
       Alert.alert('Network Error', 'Could not connect to the server. Check your connection and try again.');
@@ -583,7 +583,7 @@ const styles = StyleSheet.create({
   },
   heading: {
     fontFamily: FONTS.bold,
-    fontWeight: '600',
+
     fontSize: 27,
     color: COLORS.text,
     textAlign: 'center',

@@ -26,7 +26,7 @@ async function fetchCatalog(userId, productSlug, extraParams) {
   return { categories: categoriesJson.data || [], plans: plansJson.data || [] };
 }
 
-const WINDOW_DAYS = 30;
+const WINDOW_DAYS = 62;
 
 let warming = false;
 

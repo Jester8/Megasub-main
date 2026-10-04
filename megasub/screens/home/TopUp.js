@@ -518,7 +518,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
   },
   scrollContent: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 30 },
-  title: { fontFamily: FONTS.extrabold, fontWeight: '800', fontSize: 20, color: '#0B0D1A', marginBottom: 10 },
+  title: { fontFamily: FONTS.extrabold, fontSize: 20, color: '#0B0D1A', marginBottom: 10 },
   subtitle: { fontFamily: FONTS.regular, fontSize: 13, color: 'rgba(11,13,26,0.55)', lineHeight: 20, marginBottom: 22 },
 
   card: {

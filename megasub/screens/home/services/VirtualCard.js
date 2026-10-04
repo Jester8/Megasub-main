@@ -94,10 +94,16 @@ function sanitizeAmount(text) {
 // on top, and the total taken from the USD wallet. If that wallet is short
 // the backend converts the difference from the main wallet at the product's
 // NGN/USD rate, which is stated here so nobody is surprised by a naira debit.
+const MAINTENANCE_UNITS = { daily: 'day', weekly: 'week', monthly: 'month', quarterly: 'quarter', yearly: 'year', annually: 'year' };
+
 function FeeSummary({ amountLabel, amount, product, colors, style }) {
   const charge = cardFundingCharge(product, amount);
   const total = cardTotalUsd(amount, charge);
   const rate = Number(product?.ngn_to_usd_rate);
+  // Recurring card upkeep, if the backend ever sets one. Not part of the amount
+  // taken now, so it is shown separately and left out of the total.
+  const maintenance = Number(product?.maintenance_fee) || 0;
+  const maintenanceInterval = product?.maintenance_fee_interval;
   return (
     <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }, style]}>
       <View style={styles.summaryRow}>
@@ -114,6 +120,14 @@ function FeeSummary({ amountLabel, amount, product, colors, style }) {
         <View style={styles.summaryRow}>
           <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Total</Text>
           <Text style={[styles.summaryValue, { color: BRAND, fontFamily: FONTS.bold }]}>{formatUsd(total)}</Text>
+        </View>
+      ) : null}
+      {maintenance > 0 && maintenanceInterval && maintenanceInterval !== 'none' ? (
+        <View style={styles.summaryRow}>
+          <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Maintenance fee</Text>
+          <Text style={[styles.summaryValue, { color: colors.text }]}>
+            {formatUsd(maintenance)} / {MAINTENANCE_UNITS[maintenanceInterval] || maintenanceInterval}
+          </Text>
         </View>
       ) : null}
       <Text style={[styles.feeNote, { color: colors.textFaint }]}>
@@ -931,7 +945,7 @@ const styles = StyleSheet.create({
   cardTileBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
   cardTileBrand: { fontFamily: FONTS.bold, fontSize: 11, color: 'rgba(255,255,255,0.75)', letterSpacing: 1 },
   cardTileBalanceLabel: { fontFamily: FONTS.medium, fontSize: 11, color: 'rgba(255,255,255,0.7)', marginBottom: 2 },
-  cardTileBalance: { fontFamily: FONTS.extrabold, fontWeight: '800', fontSize: 20, color: '#FFFFFF' },
+  cardTileBalance: { fontFamily: FONTS.extrabold, fontSize: 20, color: '#FFFFFF' },
 
   typeRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
@@ -981,7 +995,7 @@ const styles = StyleSheet.create({
 
   successHeader: { alignItems: 'center', paddingVertical: 20 },
   successIconWrap: { marginBottom: 14 },
-  successTitle: { fontFamily: FONTS.extrabold, fontWeight: '800', fontSize: 20, marginBottom: 6 },
+  successTitle: { fontFamily: FONTS.extrabold, fontSize: 20, marginBottom: 6 },
   successSubtitle: { fontFamily: FONTS.medium, fontSize: 13, textAlign: 'center', paddingHorizontal: 20 },
 
   doneBtn: {

@@ -82,13 +82,13 @@ export default function WalletCard({ userData, onTopUp }) {
 const styles = StyleSheet.create({
   wrapper: {
     paddingHorizontal: 16,
-    marginTop: 14,
+    marginTop: 10,
   },
   card: {
     borderRadius: 20,
-    padding: 22,
+    padding: 18,
     overflow: 'hidden',
-    minHeight: 160,
+    minHeight: 148,
     justifyContent: 'space-between',
     elevation: 10,
     shadowColor: '#4A55DD',
@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
-    marginTop: 24,
+    marginTop: 18,
   },
   bottomRowTablet: { marginTop: 18 },
   acctLabel: {

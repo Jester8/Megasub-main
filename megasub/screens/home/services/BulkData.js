@@ -663,7 +663,7 @@ const styles = StyleSheet.create({
     borderRadius: 16, borderWidth: 1.5, padding: 16, marginTop: 22,
   },
   totalLabel: { fontFamily: FONTS.medium, fontSize: 13 },
-  totalValue: { fontFamily: FONTS.extrabold, fontWeight: '800', fontSize: 17 },
+  totalValue: { fontFamily: FONTS.extrabold, fontSize: 17 },
 
   summaryCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, borderWidth: 1.5, borderColor: '#ECEDF6', marginTop: 10, marginBottom: 20 },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 },
@@ -690,7 +690,7 @@ const styles = StyleSheet.create({
 
   successHeader: { alignItems: 'center', paddingVertical: 20 },
   successIconWrap: { marginBottom: 14 },
-  successTitle: { fontFamily: FONTS.extrabold, fontWeight: '800', fontSize: 20, marginBottom: 6 },
+  successTitle: { fontFamily: FONTS.extrabold, fontSize: 20, marginBottom: 6 },
   successSubtitle: { fontFamily: FONTS.medium, fontSize: 13, textAlign: 'center', paddingHorizontal: 20 },
 
   resultRow: { flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1.5, padding: 14, marginTop: 10 },

@@ -540,7 +540,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 14,
   },
-  headerTitle: { fontFamily: FONTS.extrabold, fontWeight: '800', fontSize: 20, color: '#0B0D1A' },
+  headerTitle: { fontFamily: FONTS.extrabold, fontSize: 20, color: '#0B0D1A' },
 
   // Bounded like BottomNav's own container (no flex:1) so this horizontal
   // ScrollView can't expand to fill the space between the header and list.
@@ -588,7 +588,7 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     fontFamily: FONTS.extrabold,
-    fontWeight: '800',
+
     fontSize: 17,
     marginBottom: 8,
   },

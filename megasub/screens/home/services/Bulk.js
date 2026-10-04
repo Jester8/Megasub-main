@@ -125,7 +125,6 @@ function parseRecipients(raw) {
 // accept the bare 10-digit local number a user might type directly.
 const isValidPhone = (p) => /^0\d{10}$/.test(String(p).trim());
 
-
 export default function Bulk({ navigate, user }) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
@@ -193,7 +192,6 @@ export default function Bulk({ navigate, user }) {
       setLoadingPlans(false);
     }
   };
-
 
   const handleContactsPicked = (numbers) => {
     const existing = new Set(parseRecipients(recipientsText));
@@ -581,7 +579,7 @@ const styles = StyleSheet.create({
     borderRadius: 16, borderWidth: 1.5, padding: 16, marginTop: 22,
   },
   totalLabel: { fontFamily: FONTS.medium, fontSize: 13 },
-  totalValue: { fontFamily: FONTS.extrabold, fontWeight: '800', fontSize: 17 },
+  totalValue: { fontFamily: FONTS.extrabold, fontSize: 17 },
 
   summaryCard: {
     backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16,

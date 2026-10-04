@@ -83,9 +83,9 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6,
   },
-  title: { fontFamily: FONTS.extrabold, fontWeight: '800', fontSize: 20, textAlign: 'center', marginBottom: 6 },
+  title: { fontFamily: FONTS.extrabold, fontSize: 20, textAlign: 'center', marginBottom: 6 },
   subtitle: { fontFamily: FONTS.medium, fontSize: 13.5, textAlign: 'center', lineHeight: 20, paddingHorizontal: 10 },
-  amount: { fontFamily: FONTS.extrabold, fontWeight: '800', fontSize: 32, color: BRAND, marginTop: 18 },
+  amount: { fontFamily: FONTS.extrabold, fontSize: 32, color: BRAND, marginTop: 18 },
 
   card: {
     width: '100%', borderRadius: 18, borderWidth: 1.5, padding: 16, marginTop: 26,
@@ -98,6 +98,6 @@ const styles = StyleSheet.create({
   rowValue: { fontFamily: FONTS.semibold, fontSize: 13.5, flexShrink: 1, textAlign: 'right' },
 
   footer: { alignItems: 'center', marginTop: 24, paddingTop: 18, borderTopWidth: 1, width: '100%' },
-  footerBrand: { fontFamily: FONTS.extrabold, fontWeight: '800', fontSize: 15, marginBottom: 4 },
+  footerBrand: { fontFamily: FONTS.extrabold, fontSize: 15, marginBottom: 4 },
   footerText: { fontFamily: FONTS.regular, fontSize: 11.5, lineHeight: 17 },
 });

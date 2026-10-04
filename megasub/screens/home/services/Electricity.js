@@ -10,6 +10,8 @@ import {
   Alert,
   StatusBar,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -55,6 +57,20 @@ function discoLogo(label) {
   const upper = (label || '').toUpperCase();
   return DISCO_LOGOS.find((d) => upper.includes(d.match))?.logo;
 }
+
+// Meter-check replies don't use one fixed key for the owner: read the common
+// spellings so a successful check never leaves the user unable to pay.
+function readMeterOwner(json) {
+  const d = json?.data || {};
+  const name = d.name || d.customer_name || d.customerName || d.account_name || d.accountName || null;
+  const address = d.address || d.customer_address || d.customerAddress || d.service_address || null;
+  return { name: name ? String(name).trim() : null, address: address ? String(address).trim() : null };
+}
+
+// Meter numbers vary in length by DISCO and meter type, so there is no fixed
+// 11-digit rule. Digits only, with a generous ceiling against pasted junk.
+const METER_MAX_LENGTH = 20;
+const METER_MIN_LENGTH = 5;
 
 function CustomPinInput({ onPinComplete, colors }) {
   const [code, setCode] = useState(['', '', '', '']);
@@ -142,7 +158,7 @@ export default function Electricity({ navigate, user }) {
   const [wrongPinVisible, setWrongPinVisible] = useState(false);
   const [validating, setValidating] = useState(false);
   const [validated, setValidated] = useState(null); // { name, address }
-  const [validationError, setValidationError] = useState(false);
+  const [validationError, setValidationError] = useState(null); // message string, or null
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -171,18 +187,23 @@ export default function Electricity({ navigate, user }) {
     setSelectedPlan(null);
   }, [selectedCategory]);
 
+  const canContinue = !!selectedPlan && meterNumber.length >= METER_MIN_LENGTH && Number(amount) > 0;
+
   const handleFormSubmit = () => {
-    if (!selectedPlan || !meterNumber || !amount) return;
+    if (!canContinue) return;
     setValidated(null);
-    setValidationError(false);
+    setValidationError(null);
+    setPin('');
+    setPinKey((k) => k + 1);
     setStep('confirm');
   };
 
   const handleValidate = async () => {
     if (pin.length < 4) return;
+    if (!(await requireNetworkOrShowError())) return;
 
     setValidating(true);
-    setValidationError(false);
+    setValidationError(null);
     try {
       const json = await validateMetreNumber({
         user_id: user?.id,
@@ -190,9 +211,30 @@ export default function Electricity({ navigate, user }) {
         metre_number: meterNumber,
         product_plan_id: selectedPlan.product_plan_id,
       });
-      setValidated({ name: json.data?.name || null, address: json.data?.address || null });
+      const owner = readMeterOwner(json);
+      if (!owner.name) {
+        // The call succeeded but carried no customer name, so there is nothing
+        // to confirm the meter against. Don't let the user pay blind.
+        setValidated(null);
+        setValidationError("We couldn't confirm the owner of this meter. Check the number and provider, then try again.");
+        return;
+      }
+      setValidated(owner);
     } catch (error) {
-      setValidationError(true);
+      const alert = alertForPurchaseError(error);
+      if (alert.isWrongPin) {
+        setWrongPinVisible(true);
+      } else if (alert.requiresPhoneVerification) {
+        Alert.alert(alert.title, alert.message, [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Verify Phone', onPress: () => navigate && navigate('verify', user) },
+        ]);
+      } else if (error.isNetworkError) {
+        setValidationError('Connection lost while checking the meter. Check your network and try again.');
+      } else {
+        // Show the server's own reason (e.g. "Invalid meter number") instead of a generic error.
+        setValidationError(error.message || "We couldn't validate this meter. Please check the number and provider.");
+      }
     } finally {
       setValidating(false);
     }
@@ -238,7 +280,10 @@ export default function Electricity({ navigate, user }) {
   };
 
   return (
-    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+    <KeyboardAvoidingView
+      style={[styles.screen, { backgroundColor: colors.background }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <StatusBar barStyle={colors.statusBarStyle} translucent backgroundColor="transparent" />
       {step !== 'success' && (
         <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
@@ -297,16 +342,16 @@ export default function Electricity({ navigate, user }) {
             />
           )}
 
-          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Meter Number (11 digits)</Text>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Meter Number</Text>
           <View style={[styles.inputCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <TextInput
               style={[styles.input, { color: colors.text }]}
               placeholder="Meter number"
               placeholderTextColor={colors.textFaint}
               keyboardType="number-pad"
-              maxLength={11}
+              maxLength={METER_MAX_LENGTH}
               value={meterNumber}
-              onChangeText={setMeterNumber}
+              onChangeText={(text) => setMeterNumber(text.replace(/\D/g, ''))}
             />
           </View>
 
@@ -343,7 +388,12 @@ export default function Electricity({ navigate, user }) {
           </View>
         </ScrollView>
       ) : (
-        <View style={styles.confirmContent}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.confirmContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Transaction Summary</Text>
           <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.summaryRow}>
@@ -392,20 +442,20 @@ export default function Electricity({ navigate, user }) {
           ) : validationError ? (
             <View style={styles.errorBanner}>
               <Ionicons name="alert-circle" size={16} color="#EF4444" />
-              <Text style={styles.errorBannerText}>An error occurred. Please try again.</Text>
+              <Text style={styles.errorBannerText}>{validationError}</Text>
             </View>
           ) : null}
-        </View>
+        </ScrollView>
       )}
 
       {step !== 'success' && (
         <View style={[styles.footer, { paddingBottom: insets.bottom + 12, backgroundColor: colors.background }]}>
           {step === 'input' ? (
             <TouchableOpacity
-              style={[styles.continueBtn, (!selectedPlan || !meterNumber || !amount) && styles.continueBtnDisabled]}
+              style={[styles.continueBtn, !canContinue && styles.continueBtnDisabled]}
               activeOpacity={0.85}
               onPress={handleFormSubmit}
-              disabled={!selectedPlan || !meterNumber || !(Number(amount) > 0)}
+              disabled={!canContinue}
             >
               <Text style={styles.continueText}>Continue</Text>
               <Feather name="arrow-right" size={18} color="#FFFFFF" />
@@ -450,7 +500,7 @@ export default function Electricity({ navigate, user }) {
           setPinKey((k) => k + 1);
         }}
       />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -479,7 +529,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontFamily: FONTS.bold, fontSize: 16, color: '#0B0D1A' },
   scrollContent: { paddingHorizontal: 20, paddingBottom: 30 },
-  confirmContent: { paddingHorizontal: 20, paddingTop: 10 },
+  confirmContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 24 },
   sectionLabel: { fontFamily: FONTS.semibold, fontSize: 13, color: '#6B7088', marginTop: 22, marginBottom: 10 },
 
   inputCard: {
@@ -515,7 +565,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
     marginTop: 18,
   },
-  errorBannerText: { fontFamily: FONTS.medium, fontSize: 12.5, color: '#EF4444' },
+  errorBannerText: { flex: 1, fontFamily: FONTS.medium, fontSize: 12.5, color: '#EF4444', textAlign: 'center' },
 
   otpContainer: { flexDirection: 'row', justifyContent: 'space-between', width: '80%', alignSelf: 'center', marginVertical: 10, gap: 12 },
   otpInputBox: { width: 50, height: 50, borderWidth: 2, borderColor: '#ECEDF6', borderRadius: 12, fontSize: 20, fontWeight: '700', color: '#0B0D1A', backgroundColor: '#FFFFFF' },

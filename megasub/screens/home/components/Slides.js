@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: PADDING,
   },
   image: {
-    height: 160, // Matches WalletCard's minHeight so both cards read as the same size
+    height: 148, // Matches WalletCard's minHeight so both cards read as the same size
     borderRadius: 20, // Matches WalletCard's borderRadius
   },
   imageTablet: {
@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 12,
+    marginTop: 8,
     gap: 8,
   },
   dot: {
