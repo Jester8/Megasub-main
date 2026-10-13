@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,8 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useResponsive } from '../lib/responsive';
-
-const BASE_URL = 'https://mega-sub.com/api/v1/external';
+import { forgotPassword, resetPassword } from '../lib/api';
 
 const COLORS = {
   primary: '#4A55DD',
@@ -41,16 +40,21 @@ const FONTS = {
   extrabold: 'Montserrat_800ExtraBold',
 };
 
+const RESEND_SECONDS = 30;
+
 function FormInput({
   label,
   placeholder,
   value,
   onChangeText,
+  secureTextEntry,
   keyboardType,
   autoCapitalize,
+  maxLength,
   error,
 }) {
   const [focused, setFocused] = useState(false);
+  const [shown, setShown] = useState(false);
 
   return (
     <View style={inputStyles.wrapper}>
@@ -62,11 +66,18 @@ function FormInput({
           placeholderTextColor={COLORS.muted}
           value={value}
           onChangeText={onChangeText}
+          secureTextEntry={secureTextEntry && !shown}
           keyboardType={keyboardType || 'default'}
           autoCapitalize={autoCapitalize || 'none'}
+          maxLength={maxLength}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
         />
+        {secureTextEntry && (
+          <TouchableOpacity onPress={() => setShown(!shown)} style={inputStyles.eyeBtn}>
+            <Ionicons name={shown ? 'eye-off-outline' : 'eye-outline'} size={19} color={COLORS.muted} />
+          </TouchableOpacity>
+        )}
       </View>
       {error ? <Text style={inputStyles.errorText}>{error}</Text> : null}
     </View>
@@ -106,6 +117,7 @@ const inputStyles = StyleSheet.create({
     color: COLORS.text,
     height: '100%',
   },
+  eyeBtn: { padding: 4 },
   errorText: {
     fontFamily: FONTS.regular,
     fontSize: 11.5,
@@ -115,15 +127,28 @@ const inputStyles = StyleSheet.create({
   },
 });
 
+// Two steps: request a code by email, then confirm that code together with
+// the new password in one call. The backend no longer emails a reset link.
 export default function ResetPasswordScreen({ navigate }) {
   const insets = useSafeAreaInsets();
   const { column } = useResponsive();
+
+  const [step, setStep] = useState('request'); // 'request' -> 'confirm' -> 'done'
   const [email, setEmail] = useState('');
-  const [sent, setSent] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [countdown, setCountdown] = useState(0);
 
-  function validate() {
+  useEffect(() => {
+    if (countdown <= 0) return;
+    const timer = setTimeout(() => setCountdown((n) => n - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [countdown]);
+
+  function validateEmail() {
     const e = {};
     if (!email.trim()) e.email = 'Email is required';
     else if (!/\S+@\S+\.\S+/.test(email)) e.email = 'Enter a valid email';
@@ -131,55 +156,40 @@ export default function ResetPasswordScreen({ navigate }) {
     return Object.keys(e).length === 0;
   }
 
-  async function handleReset() {
-    if (!validate()) return;
+  function validateConfirm() {
+    const e = {};
+    if (!/^\d{4,6}$/.test(otp.trim())) e.otp = 'Enter the code we emailed you';
+    if (password.length < 8) e.password = 'Password must be at least 8 characters';
+    else if (password !== confirmPassword) e.confirmPassword = 'Passwords do not match';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  }
 
+  async function sendCode() {
+    if (!validateEmail()) return;
     setLoading(true);
     try {
-      console.log('📤 Sending forgot password request:', { email: email.trim().toLowerCase() });
+      await forgotPassword({ email: email.trim().toLowerCase() });
+      setStep('confirm');
+      setCountdown(RESEND_SECONDS);
+    } catch (error) {
+      Alert.alert('Could Not Send Code', error.message || 'Please check the email and try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
 
-      const res = await fetch(`${BASE_URL}/forgot_password`, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: email.trim().toLowerCase(),
-        }),
-      });
-
-      const json = await res.json();
-      console.log('📥 Forgot password response:', JSON.stringify(json, null, 2));
-
-      if (res.status === 422 && json.errors) {
-        const errorMessages = [];
-        Object.keys(json.errors).forEach((field) => {
-          const messages = json.errors[field];
-          if (Array.isArray(messages)) {
-            errorMessages.push(`${field}: ${messages.join(', ')}`);
-          } else {
-            errorMessages.push(`${field}: ${messages}`);
-          }
-        });
-        Alert.alert('Validation Error', errorMessages.join('\n'));
-        return;
-      }
-
-      if (!res.ok) {
-        Alert.alert('Error', json.message || 'Something went wrong. Please try again.');
-        return;
-      }
-
-      if (json.status === false) {
-        Alert.alert('Error', json.message || 'Something went wrong. Please try again.');
-        return;
-      }
-
-      setSent(true);
-    } catch (err) {
-      console.error('Network error:', err);
-      Alert.alert('Network Error', 'Could not connect to the server. Check your connection and try again.');
+  async function handleConfirm() {
+    if (!validateConfirm()) return;
+    setLoading(true);
+    try {
+      await resetPassword({ email: email.trim().toLowerCase(), otp: otp.trim(), password });
+      setStep('done');
+    } catch (error) {
+      // A wrong or expired code is the most likely rejection here.
+      const isCodeError = /otp|code|invalid|expired/i.test(error.message || '');
+      if (isCodeError) setErrors({ otp: error.message });
+      else Alert.alert('Could Not Reset Password', error.message || 'Please try again.');
     } finally {
       setLoading(false);
     }
@@ -192,10 +202,7 @@ export default function ResetPasswordScreen({ navigate }) {
       <View style={styles.glowTop} pointerEvents="none" />
       <View style={styles.glowBottom} pointerEvents="none" />
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 24 }, column]}
           showsVerticalScrollIndicator={false}
@@ -203,25 +210,21 @@ export default function ResetPasswordScreen({ navigate }) {
         >
           <TouchableOpacity
             style={styles.backBtn}
-            onPress={() => navigate && navigate('login')}
+            onPress={() => (step === 'confirm' ? setStep('request') : navigate && navigate('login'))}
             activeOpacity={0.7}
           >
             <Ionicons name="arrow-back" size={20} color={COLORS.text} />
           </TouchableOpacity>
 
           <View style={styles.logoWrap}>
-            <Image
-              source={require('../assets/logo.png')}
-              style={styles.logo}
-              resizeMode="contain"
-            />
+            <Image source={require('../assets/logo.png')} style={styles.logo} resizeMode="contain" />
           </View>
 
-          {!sent ? (
+          {step === 'request' ? (
             <>
               <Text style={styles.heading}>Reset your password</Text>
               <Text style={styles.subheading}>
-                Enter the email linked to your account and we'll send you a link to reset your password
+                Enter the email linked to your account and we'll send you a 6-digit code to reset your password.
               </Text>
 
               <FormInput
@@ -235,36 +238,79 @@ export default function ResetPasswordScreen({ navigate }) {
 
               <TouchableOpacity
                 style={[styles.sendBtn, (!email || loading) && styles.sendBtnDisabled]}
-                onPress={handleReset}
+                onPress={sendCode}
                 activeOpacity={email && !loading ? 0.85 : 1}
                 disabled={loading || !email}
               >
-                {loading ? (
-                  <ActivityIndicator color={COLORS.white} size="small" />
-                ) : (
-                  <Text style={styles.sendBtnText}>Send Reset Link</Text>
+                {loading ? <ActivityIndicator color={COLORS.white} size="small" /> : (
+                  <Text style={styles.sendBtnText}>Send Code</Text>
                 )}
+              </TouchableOpacity>
+            </>
+          ) : step === 'confirm' ? (
+            <>
+              <Text style={styles.heading}>Enter the code</Text>
+              <Text style={styles.subheading}>
+                We sent a 6-digit code to{'\n'}
+                <Text style={styles.emailHighlight}>{email}</Text>
+              </Text>
+
+              <FormInput
+                label="Verification Code"
+                placeholder="123456"
+                value={otp}
+                onChangeText={(t) => setOtp(t.replace(/\D/g, '').slice(0, 6))}
+                keyboardType="number-pad"
+                maxLength={6}
+                error={errors.otp}
+              />
+              <FormInput
+                label="New Password"
+                placeholder="At least 8 characters"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                error={errors.password}
+              />
+              <FormInput
+                label="Confirm New Password"
+                placeholder="Re-enter your new password"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry
+                error={errors.confirmPassword}
+              />
+
+              <TouchableOpacity
+                style={[styles.sendBtn, loading && styles.sendBtnDisabled]}
+                onPress={handleConfirm}
+                activeOpacity={loading ? 1 : 0.85}
+                disabled={loading}
+              >
+                {loading ? <ActivityIndicator color={COLORS.white} size="small" /> : (
+                  <Text style={styles.sendBtnText}>Reset Password</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.resendBtn}
+                onPress={() => countdown <= 0 && sendCode()}
+                activeOpacity={0.8}
+                disabled={countdown > 0 || loading}
+              >
+                <Text style={[styles.resendBtnText, countdown > 0 && styles.resendBtnDisabled]}>
+                  {countdown > 0 ? `Resend code in ${countdown}s` : 'Resend Code'}
+                </Text>
               </TouchableOpacity>
             </>
           ) : (
             <View style={styles.successWrap}>
               <View style={styles.successIconBox}>
-                <Ionicons name="mail-open-outline" size={34} color={COLORS.primary} />
+                <Ionicons name="checkmark-circle-outline" size={34} color={COLORS.primary} />
               </View>
 
-              <Text style={styles.heading}>Check your inbox</Text>
-
-              <Text style={styles.subheading}>
-                We've sent a password reset link to{'\n'}
-                <Text style={styles.emailHighlight}>{email}</Text>
-              </Text>
-
-              <View style={styles.hintBox}>
-                <Ionicons name="information-circle-outline" size={16} color={COLORS.primary} style={{ marginTop: 1 }} />
-                <Text style={styles.hintText}>
-                  Didn't see it? Check your spam folder. The link expires in 30 minutes.
-                </Text>
-              </View>
+              <Text style={styles.heading}>Password reset</Text>
+              <Text style={styles.subheading}>Your password has been changed. Log in with your new password.</Text>
 
               <TouchableOpacity
                 style={styles.backBtn2}
@@ -274,19 +320,10 @@ export default function ResetPasswordScreen({ navigate }) {
                 <Ionicons name="arrow-back" size={16} color={COLORS.white} />
                 <Text style={styles.backBtn2Text}>Back to log in</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.retryBtn}
-                onPress={() => setSent(false)}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="refresh-outline" size={15} color={COLORS.primary} />
-                <Text style={styles.retryBtnText}>Try a different email</Text>
-              </TouchableOpacity>
             </View>
           )}
 
-          {!sent && (
+          {step === 'request' && (
             <View style={styles.loginRow}>
               <Text style={styles.loginText}>Remembered your password? </Text>
               <TouchableOpacity onPress={() => navigate && navigate('login')}>
@@ -362,7 +399,6 @@ const styles = StyleSheet.create({
   },
   heading: {
     fontFamily: FONTS.bold,
-
     fontSize: 27,
     color: COLORS.text,
     textAlign: 'center',
@@ -394,6 +430,19 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: COLORS.white,
   },
+  resendBtn: {
+    alignItems: 'center',
+    marginTop: 12,
+    paddingVertical: 6,
+  },
+  resendBtnText: {
+    fontFamily: FONTS.semibold,
+    fontSize: 13,
+    color: COLORS.primary,
+  },
+  resendBtnDisabled: {
+    color: COLORS.muted,
+  },
   successWrap: {
     alignItems: 'center',
   },
@@ -410,23 +459,6 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.semibold,
     color: COLORS.primary,
   },
-  hintBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    backgroundColor: COLORS.inputBg,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 28,
-    width: '100%',
-  },
-  hintText: {
-    fontFamily: FONTS.regular,
-    fontSize: 12,
-    color: COLORS.muted,
-    lineHeight: 19,
-    flex: 1,
-  },
   backBtn2: {
     width: '100%',
     flexDirection: 'row',
@@ -442,22 +474,6 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.bold,
     fontSize: 15,
     color: COLORS.white,
-  },
-  retryBtn: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    borderRadius: 14,
-    paddingVertical: 14,
-  },
-  retryBtnText: {
-    fontFamily: FONTS.semibold,
-    fontSize: 14,
-    color: COLORS.primary,
   },
   loginRow: {
     flexDirection: 'row',

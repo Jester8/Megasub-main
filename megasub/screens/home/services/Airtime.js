@@ -22,6 +22,8 @@ import PlanGrid from '../components/PlanGrid';
 import SuccessView from '../components/SuccessView';
 import ContactPicker from '../components/ContactPicker';
 import WrongPinModal from '../components/WrongPinModal';
+import ScheduleSheet from '../components/ScheduleSheet';
+import useSchedulePurchase, { ScheduleLink } from '../components/useSchedulePurchase';
 import PurchaseSuccessModal from '../components/PurchaseSuccessModal';
 import CouponCheck from '../components/CouponCheck';
 import { detectNetworkFromPhone, findNetworkByLabel } from '../../../lib/networkDetect';
@@ -225,6 +227,27 @@ export default function Airtime({ navigate, user }) {
     if (!selectedNetwork || !selectedCategory || !selectedPlan || !isValidPhone(phone) || !amount) return;
     setStep('confirm');
   };
+
+  // Same recipient/plan the user just confirmed, sent as a schedule instead.
+  // Face value is sent as numbers, as the scheduling API documents.
+  const schedule = useSchedulePurchase({
+    user,
+    navigate,
+    serviceType: 'airtime',
+    getPin: () => pin,
+    onWrongPin: () => setWrongPinVisible(true),
+    getPurchase: () => {
+      const cleaned = phone.replace(/\s+/g, '');
+      return {
+        network_id: selectedNetwork.id,
+        phone_number: cleaned.startsWith('0') ? cleaned : `0${cleaned}`,
+        product_plan_id: selectedPlan.product_plan_id,
+        amount: Number(amount),
+        actual_amount: Number(amount),
+        validatephonenetwork: 0,
+      };
+    },
+  });
 
   const handleBuyAirtime = async () => {
     if (pin.length < 4) return;
@@ -518,8 +541,18 @@ export default function Airtime({ navigate, user }) {
               )}
             </TouchableOpacity>
           )}
+          {step === 'confirm' && !appliedCoupon ? (
+            <ScheduleLink onPress={schedule.open} disabled={pin.length < 4 || loading} />
+          ) : null}
         </View>
       )}
+      <ScheduleSheet
+        visible={schedule.visible}
+        busy={schedule.busy}
+        colors={colors}
+        onClose={schedule.close}
+        onConfirm={schedule.submit}
+      />
       <ContactPicker
         visible={contactPickerVisible}
         onClose={() => setContactPickerVisible(false)}

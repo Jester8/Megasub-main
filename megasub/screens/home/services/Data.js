@@ -22,6 +22,8 @@ import PlanGrid from '../components/PlanGrid';
 import SuccessView from '../components/SuccessView';
 import ContactPicker from '../components/ContactPicker';
 import WrongPinModal from '../components/WrongPinModal';
+import ScheduleSheet from '../components/ScheduleSheet';
+import useSchedulePurchase, { ScheduleLink } from '../components/useSchedulePurchase';
 import { detectNetworkFromPhone, findNetworkByLabel } from '../../../lib/networkDetect';
 import { formatNaira, alertForPurchaseError, stripNetworkPrefix, formatPlanTitle } from '../../../lib/format';
 import CouponCheck from '../components/CouponCheck';
@@ -197,6 +199,26 @@ export default function Data({ navigate, user }) {
     if (!selectedNetwork || !isValidPhone(phone) || !selectedCategory || !selectedPlan) return;
     setStep('confirm');
   };
+
+  // Same recipient/plan the user just confirmed, sent as a schedule instead.
+  const schedule = useSchedulePurchase({
+    user,
+    navigate,
+    serviceType: 'data',
+    getPin: () => pin,
+    onWrongPin: () => setWrongPinVisible(true),
+    getPurchase: () => {
+      const cleaned = phone.replace(/\s+/g, '');
+      return {
+        network_id: selectedNetwork.id,
+        phone_number: cleaned.startsWith('0') ? cleaned : `0${cleaned}`,
+        product_plan_category_id: selectedCategory.id,
+        product_plan_id: selectedPlan.product_plan_id,
+        wallet_category: 'main_wallet',
+        validatephonenetwork: 0,
+      };
+    },
+  });
 
   const handleBuyData = async () => {
     if (pin.length < 4) return;
@@ -467,8 +489,18 @@ export default function Data({ navigate, user }) {
               )}
             </TouchableOpacity>
           )}
+          {step === 'confirm' && !appliedCoupon ? (
+            <ScheduleLink onPress={schedule.open} disabled={pin.length < 4 || loading} />
+          ) : null}
         </View>
       )}
+      <ScheduleSheet
+        visible={schedule.visible}
+        busy={schedule.busy}
+        colors={colors}
+        onClose={schedule.close}
+        onConfirm={schedule.submit}
+      />
       <ContactPicker
         visible={contactPickerVisible}
         onClose={() => setContactPickerVisible(false)}

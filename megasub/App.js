@@ -32,6 +32,7 @@ import Cable from './screens/home/services/Cable';
 import Electricity from './screens/home/services/Electricity';
 import Bulk from './screens/home/services/Bulk';
 import ResultChecker from './screens/home/services/ResultChecker';
+import ScheduledPurchases from './screens/home/ScheduledPurchases';
 import ESIM from './screens/home/services/ESIM';
 import MyESIMs from './screens/home/services/MyESIMs';
 import VirtualCard from './screens/home/services/VirtualCard';
@@ -351,6 +352,7 @@ function navigate(s, userData) {
   if (screen === 'electricity') content = <Electricity navigate={navigate} user={user} />;
   if (screen === 'bulk')       content = <Bulk navigate={navigate} user={user} />;
   if (screen === 'result-checker') content = <ResultChecker navigate={navigate} user={user} />;
+  if (screen === 'scheduled')  content = <ScheduledPurchases navigate={navigate} user={user} />;
   if (screen === 'esim')       content = <ESIM navigate={navigate} user={user} />;
   if (screen === 'my-esims')   content = <MyESIMs navigate={navigate} user={user} />;
   if (screen === 'virtual-card') content = <VirtualCard navigate={navigate} user={user} />;

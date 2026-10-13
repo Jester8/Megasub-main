@@ -9,6 +9,7 @@ export const SERVICES = [
   { id: 'bulk-sms',     label: 'Bulk\nAirtime',  icon: 'phone-portrait-outline',  color: '#7C3AED', bg: 'rgba(124,58,237,0.1)' },
   { id: 'bulk-data',    label: 'Bulk\nData',     icon: 'cellular-outline',        color: '#2563EB', bg: 'rgba(37,99,235,0.1)' },
   { id: 'waec',         label: 'Results\nChecker', icon: 'school-outline',        color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
+  { id: 'scheduled',    label: 'Scheduled\nPurchases', icon: 'calendar-outline',   color: '#8B5CF6', bg: 'rgba(139,92,246,0.1)' },
 ];
 
 // Home shows the first eight services (two rows of four); "See all" shows
@@ -28,6 +29,7 @@ export const SERVICE_SCREENS = {
   'bulk-data': 'bulk-data',
   esim: 'esim',
   waec: 'result-checker',
+  scheduled: 'scheduled',
   'virtual-card': 'virtual-card',
   kyc: 'kyc',
 };

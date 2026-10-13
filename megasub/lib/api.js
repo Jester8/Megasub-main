@@ -187,7 +187,12 @@ async function request(path, { method = 'GET', body, params } = {}) {
     // so callers can degrade gracefully: screens show a "coming soon" notice
     // (isUnavailable) and buyBulkData falls back to looping buy_data
     // (isRouteMissing) instead of surfacing a generic failure.
-    if (response.status === 404 && /route .* could not be found/i.test(json?.message || '')) {
+    // The gateway's own wording for a V2 feature that isn't deployed yet
+    // ("The requested service is unavailable.") is treated the same way.
+    if (
+      response.status === 404 &&
+      (/route .* could not be found/i.test(json?.message || '') || /requested service is unavailable/i.test(json?.message || ''))
+    ) {
       const error = new Error('This feature is not available yet. Please check back soon.');
       error.payload = json;
       error.isRouteMissing = true;
@@ -526,11 +531,16 @@ function googleAuthErrorMessage(json, httpStatus) {
 export const setTransactionPin = ({ userId, pin }) =>
   request('set_transaction_pin', { method: 'POST', body: { user_id: userId, pin, confirm_pin: pin } });
 
-// The documented, working password-reset path. change_password above was
-// never real — ChangePassword.js sends the user here instead, since this is
-// the only password-reset endpoint that exists on the backend.
+// Password reset is an OTP flow now, the same shape as PIN recovery below:
+// forgot_password sends a 6-digit code to the user's email (no more reset
+// link), and reset_password confirms that code and sets the new password in
+// one call. change_password above was never real — ChangePassword.js and
+// reset.jsx both run this flow instead.
 export const forgotPassword = ({ email }) =>
   request('forgot_password', { method: 'POST', body: { email } });
+
+export const resetPassword = ({ email, otp, password }) =>
+  request('reset_password', { method: 'POST', body: { email, otp, password, password_confirmation: password } });
 
 // PIN recovery is a separate OTP flow from password reset (its own "Reset
 // PIN" email) — forgot_pin sends the code, reset_pin confirms it and sets
@@ -720,3 +730,32 @@ export const fetchTransactions = ({ userId, dateFrom, dateTo }) =>
 
 export const fetchSingleTransaction = ({ userId, transactionId }) =>
   request('fetch_single_transaction', { params: { user_id: userId, transaction_id: transactionId } });
+
+// ── Scheduled purchases (airtime, data, cable) — V2 ─────────────────
+// One-time, daily, weekly or monthly schedules for the three Mega-sub-only
+// services. The transaction PIN authorises each change and is never stored
+// in the schedule itself. `body` for create is
+// { user_id, service_type, recurrence, timezone, starts_at, pin, purchase }.
+export const createScheduledPurchase = (body) => request('scheduled_purchases', { method: 'POST', body });
+
+export const fetchScheduledPurchases = (userId) =>
+  request('scheduled_purchases', { params: { user_id: userId } });
+
+export const fetchScheduledPurchase = ({ userId, scheduleId }) =>
+  request(`scheduled_purchases/${scheduleId}`, { params: { user_id: userId } });
+
+export const updateScheduledPurchase = ({ userId, scheduleId, recurrence, timezone, startsAt, pin }) =>
+  request(`scheduled_purchases/${scheduleId}`, {
+    method: 'PUT',
+    body: { user_id: userId, recurrence, timezone, starts_at: startsAt, pin },
+  });
+
+const scheduleAction = (action) => ({ userId, scheduleId, pin }) =>
+  request(`scheduled_purchases/${scheduleId}/${action}`, { method: 'POST', body: { user_id: userId, pin } });
+
+export const pauseScheduledPurchase = scheduleAction('pause');
+export const resumeScheduledPurchase = scheduleAction('resume');
+export const cancelScheduledPurchase = scheduleAction('cancel');
+
+export const fetchScheduleExecutions = ({ userId, scheduleId }) =>
+  request(`scheduled_purchases/${scheduleId}/executions`, { params: { user_id: userId } });

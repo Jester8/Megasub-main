@@ -21,6 +21,8 @@ import CategoryTabs from '../components/CategoryTabs';
 import PlanGrid from '../components/PlanGrid';
 import SuccessView from '../components/SuccessView';
 import WrongPinModal from '../components/WrongPinModal';
+import ScheduleSheet from '../components/ScheduleSheet';
+import useSchedulePurchase, { ScheduleLink } from '../components/useSchedulePurchase';
 import { formatNaira, alertForPurchaseError } from '../../../lib/format';
 
 const FONTS = {
@@ -179,6 +181,21 @@ export default function Cable({ navigate, user }) {
       setValidating(false);
     }
   };
+
+  // The validated smartcard and package the user just confirmed, scheduled.
+  const schedule = useSchedulePurchase({
+    user,
+    navigate,
+    serviceType: 'cable',
+    getPin: () => pin,
+    onWrongPin: () => setWrongPinVisible(true),
+    getPurchase: () => ({
+      smart_card_number: smartcard,
+      validation_customer_name: validatedName,
+      cable_product_plan_category_id: selectedProvider.id,
+      cable_product_plan_id: selectedPackage.id,
+    }),
+  });
 
   const handleSubscribe = async () => {
     if (pin.length < 4 || !validatedName) return;
@@ -386,8 +403,18 @@ export default function Cable({ navigate, user }) {
               )}
             </TouchableOpacity>
           )}
+          {step === 'confirm' && validatedName ? (
+            <ScheduleLink onPress={schedule.open} disabled={pin.length < 4 || loading} />
+          ) : null}
         </View>
       )}
+      <ScheduleSheet
+        visible={schedule.visible}
+        busy={schedule.busy}
+        colors={colors}
+        onClose={schedule.close}
+        onConfirm={schedule.submit}
+      />
       <WrongPinModal
         visible={wrongPinVisible}
         onClose={() => {
