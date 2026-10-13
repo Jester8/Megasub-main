@@ -2,6 +2,7 @@
   "expo": {
     "name": "megasub",
     "slug": "megasub",
+    "scheme": "megasub",
     "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/app-icon-1024.png",
