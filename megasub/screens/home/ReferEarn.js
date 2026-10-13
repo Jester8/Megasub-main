@@ -10,13 +10,21 @@ import {
   Share,
   Alert,
   StatusBar,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
 import * as SecureStore from 'expo-secure-store';
 import { useTheme } from '../../contexts/ThemeContext';
-import { updateReferralCode } from '../../lib/api';
+import {
+  updateReferralCode,
+  fetchReferralSummary,
+  fetchReferredUsers,
+  fetchReferralRewards,
+} from '../../lib/api';
+import { formatNaira } from '../../lib/format';
 
 const FONTS = {
   regular: 'Montserrat_400Regular',
@@ -28,33 +36,99 @@ const FONTS = {
 
 const BRAND = '#4A55DD';
 const USER_KEY = 'megasub_user_data';
+// Backend rule: 3-50 characters, letters / numbers / underscore / hyphen.
+const CODE_PATTERN = /^[A-Za-z0-9_-]{3,50}$/;
+const PREVIEW_ROWS = 10;
+
+// The list endpoints are paginated; depending on the serializer the rows sit
+// at data, data.data or data.items. Normalise so the screen never crashes on
+// a shape difference.
+const toList = (json) => {
+  const data = json?.data;
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.items)) return data.items;
+  return [];
+};
+
+const toTotal = (json, fallback) => {
+  const data = json?.data;
+  return data?.total ?? data?.meta?.total ?? json?.meta?.total ?? fallback;
+};
+
+const personName = (row) =>
+  row?.name ||
+  row?.full_name ||
+  [row?.first_name, row?.last_name].filter(Boolean).join(' ') ||
+  row?.username ||
+  'Customer';
+
+const formatDate = (value) => {
+  if (!value) return '';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime())
+    ? ''
+    : d.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
+const prettify = (value) =>
+  String(value || '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
+const naira = (value) => `₦${formatNaira(value)}`;
+
+const STATUS_COLORS = { credited: '#16A34A', pending: '#D97706', reversed: '#DC2626' };
 
 export default function ReferEarn({ navigate, user }) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
+  const queryClient = useQueryClient();
   const [copied, setCopied] = useState(false);
   const [customCode, setCustomCode] = useState('');
+  const [codeError, setCodeError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [currentUser, setCurrentUser] = useState(user || {});
+  const [refreshing, setRefreshing] = useState(false);
+  const [tab, setTab] = useState('rewards');
 
-  // A custom referral_code, once set, takes priority over the phone number
-  // as the identifier others use to sign up under this account.
-  const referralCode = currentUser?.referral_code || currentUser?.phone_number || 'Not set';
-  // mega-sub.com is the only confirmed public domain in this app (it's the
-  // live API host) — there's no app-store listing yet ("Rate Megasub" is
-  // still a placeholder) and no custom URL scheme configured, so this is the
-  // best available invite destination until a dedicated landing/store page
-  // exists. Swap this for the real store/landing link once one is live.
-  const inviteLink = `https://mega-sub.com?ref=${encodeURIComponent(referralCode)}`;
-  const shareMessage = `Join me on Megasub for fast, reliable airtime, data, and bill payments! Use my referral code ${referralCode} when you sign up: ${inviteLink}`;
+  const summaryQuery = useQuery({ queryKey: ['referral-summary', user?.id], queryFn: fetchReferralSummary });
+  const usersQuery = useQuery({
+    queryKey: ['referral-users', user?.id],
+    queryFn: () => fetchReferredUsers({ perPage: PREVIEW_ROWS }),
+  });
+  const rewardsQuery = useQuery({
+    queryKey: ['referral-rewards', user?.id],
+    queryFn: () => fetchReferralRewards({ perPage: PREVIEW_ROWS }),
+  });
+
+  const summary = summaryQuery.data?.data;
+  const referralCode = summary?.referral_code || user?.referral_code || '';
+  const referralLink = summary?.referral_link || '';
+  const enabled = summary ? summary.enabled !== false : true;
+  const rewards = summary?.rewards || {};
+  const referredUsers = toList(usersQuery.data);
+  const rewardRows = toList(rewardsQuery.data);
+  const unavailable = summaryQuery.error?.isUnavailable;
+
+  const shareMessage = referralCode
+    ? `Join me on Megasub for fast, reliable airtime, data, and bill payments! Use my referral code ${referralCode} when you sign up${referralLink ? `: ${referralLink}` : '.'}`
+    : '';
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await Promise.allSettled([summaryQuery.refetch(), usersQuery.refetch(), rewardsQuery.refetch()]);
+    setRefreshing(false);
+  };
 
   const handleCopy = async () => {
+    if (!referralCode) return;
     await Clipboard.setStringAsync(referralCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
 
   const handleShare = async () => {
+    if (!shareMessage) return;
     try {
       await Share.share({ message: shareMessage });
     } catch (error) {
@@ -62,24 +136,78 @@ export default function ReferEarn({ navigate, user }) {
     }
   };
 
+  const handleChangeCode = (text) => {
+    setCustomCode(text);
+    if (codeError) setCodeError('');
+  };
+
   const handleSaveCode = async () => {
     const trimmed = customCode.trim();
-    if (!trimmed) return;
+    if (!CODE_PATTERN.test(trimmed)) {
+      setCodeError('Use 3-50 characters: letters, numbers, underscores or hyphens.');
+      return;
+    }
 
     setSaving(true);
     try {
-      await updateReferralCode({ userId: currentUser?.id, referralCode: trimmed });
-      const updatedUser = { ...currentUser, referral_code: trimmed };
-      setCurrentUser(updatedUser);
-      await SecureStore.setItemAsync(USER_KEY, JSON.stringify(updatedUser));
+      const json = await updateReferralCode({ referralCode: trimmed });
+      const saved = json?.data?.referral_code || trimmed;
+      queryClient.setQueryData(['referral-summary', user?.id], (old) => ({
+        ...(old || {}),
+        data: { ...(old?.data || {}), ...(json?.data || {}), referral_code: saved },
+      }));
+      // Keep the cached user record in step so other screens see the new code.
+      try {
+        const raw = await SecureStore.getItemAsync(USER_KEY);
+        if (raw) await SecureStore.setItemAsync(USER_KEY, JSON.stringify({ ...JSON.parse(raw), referral_code: saved }));
+      } catch {
+        // Best-effort cache; the server is the source of truth.
+      }
       setCustomCode('');
-      Alert.alert('Referral Code Updated', `Your referral code is now ${trimmed}.`);
+      Alert.alert('Referral Code Updated', `Your referral code is now ${saved}.`);
     } catch (error) {
-      Alert.alert('Could Not Update Code', error.message || 'Please try again.');
+      if (error.fieldMessage) setCodeError(error.fieldMessage);
+      else Alert.alert('Could Not Update Code', error.message || 'Please try again.');
     } finally {
       setSaving(false);
     }
   };
+
+  const renderRewardRow = (row, index) => {
+    const status = String(row?.status || '').toLowerCase();
+    return (
+      <View key={row?.id ?? index} style={[styles.row, { borderColor: colors.border }]}>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.rowTitle, { color: colors.text }]} numberOfLines={1}>
+            {prettify(row?.service_type || row?.reward_kind || 'Reward')}
+          </Text>
+          <Text style={[styles.rowSub, { color: colors.textFaint }]} numberOfLines={1}>
+            {[row?.referred_user_name || row?.referred_user?.name, formatDate(row?.created_at)].filter(Boolean).join(' · ')}
+          </Text>
+        </View>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={[styles.rowAmount, { color: colors.text }]}>{naira(row?.amount ?? row?.reward_amount ?? 0)}</Text>
+          {status ? (
+            <Text style={[styles.rowStatus, { color: STATUS_COLORS[status] || colors.textFaint }]}>{prettify(status)}</Text>
+          ) : null}
+        </View>
+      </View>
+    );
+  };
+
+  const renderUserRow = (row, index) => (
+    <View key={row?.id ?? index} style={[styles.row, { borderColor: colors.border }]}>
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.rowTitle, { color: colors.text }]} numberOfLines={1}>{personName(row)}</Text>
+        <Text style={[styles.rowSub, { color: colors.textFaint }]}>
+          {formatDate(row?.joined_at || row?.created_at)}
+        </Text>
+      </View>
+    </View>
+  );
+
+  const activeQuery = tab === 'rewards' ? rewardsQuery : usersQuery;
+  const activeRows = tab === 'rewards' ? rewardRows : referredUsers;
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
@@ -96,46 +224,93 @@ export default function ReferEarn({ navigate, user }) {
         <View style={{ width: 38 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={BRAND} />}
+      >
         <View style={styles.heroCard}>
           <View style={styles.heroIconWrap}>
             <Ionicons name="gift" size={26} color="#FFFFFF" />
           </View>
           <Text style={styles.heroTitle}>Invite Friends, Earn Rewards</Text>
           <Text style={styles.heroSub}>
-            Share your referral code with friends. When they sign up using it, they're linked to your account.
+            {summary?.minimum_qualifying_amount
+              ? `Earn when friends you refer buy ${(summary.eligible_services || ['data', 'airtime']).join(' or ')} worth ${naira(summary.minimum_qualifying_amount)} or more.`
+              : "Share your referral code with friends. When they sign up using it, they're linked to your account."}
           </Text>
         </View>
 
-        <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Your Referral Code</Text>
-        <View style={[styles.codeCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.codeText, { color: BRAND }]} numberOfLines={1}>{referralCode}</Text>
-          <TouchableOpacity onPress={handleCopy} activeOpacity={0.7} style={styles.copyBtn}>
-            <Feather name={copied ? 'check' : 'copy'} size={16} color={BRAND} />
-          </TouchableOpacity>
-        </View>
-        {!currentUser?.referral_code ? (
-          <Text style={[styles.hintText, { color: colors.textFaint }]}>
-            You haven't set a custom code yet, so your phone number works as your referral code for now.
+        {unavailable ? (
+          <Text style={[styles.hintText, { color: colors.textFaint, marginTop: 14 }]}>
+            Referral rewards aren't available yet. Please check back soon.
+          </Text>
+        ) : null}
+        {summary && !enabled ? (
+          <Text style={[styles.hintText, { color: colors.textFaint, marginTop: 14 }]}>
+            The referral programme is currently paused. You can still share your code, but new rewards aren't being credited.
           </Text>
         ) : null}
 
-        <TouchableOpacity style={styles.shareBtn} activeOpacity={0.85} onPress={handleShare}>
+        <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Your Referral Code</Text>
+        <View style={[styles.codeCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          {summaryQuery.isLoading ? (
+            <ActivityIndicator color={BRAND} />
+          ) : (
+            <Text style={[styles.codeText, { color: BRAND }]} numberOfLines={1}>{referralCode || 'Not set'}</Text>
+          )}
+          <TouchableOpacity onPress={handleCopy} activeOpacity={0.7} style={styles.copyBtn} disabled={!referralCode}>
+            <Feather name={copied ? 'check' : 'copy'} size={16} color={BRAND} />
+          </TouchableOpacity>
+        </View>
+        {summaryQuery.error && !unavailable ? (
+          <Text style={[styles.hintText, { color: colors.textFaint }]}>
+            {summaryQuery.error.message} Pull down to retry.
+          </Text>
+        ) : null}
+
+        <TouchableOpacity
+          style={[styles.shareBtn, !shareMessage && styles.saveBtnDisabled]}
+          activeOpacity={0.85}
+          onPress={handleShare}
+          disabled={!shareMessage}
+        >
           <Ionicons name="share-social-outline" size={18} color="#FFFFFF" />
           <Text style={styles.shareBtnText}>Share Invite Link</Text>
         </TouchableOpacity>
 
+        {summary ? (
+          <>
+            <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Your Earnings</Text>
+            <View style={styles.statsGrid}>
+              {[
+                ['Referred', String(summary.referred_users_count ?? 0)],
+                ['Earned', naira(rewards.credited_amount ?? 0)],
+                ['Pending', naira(rewards.pending_amount ?? 0)],
+              ].map(([label, value]) => (
+                <View key={label} style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <Text style={[styles.statValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
+                  <Text style={[styles.statLabel, { color: colors.textMuted }]}>{label}</Text>
+                </View>
+              ))}
+            </View>
+          </>
+        ) : null}
+
         <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Customize Your Code</Text>
-        <View style={[styles.inputCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.inputCard, { backgroundColor: colors.card, borderColor: codeError ? '#DC2626' : colors.border }]}>
           <TextInput
             style={[styles.input, { color: colors.text }]}
             placeholder="e.g. SAMUEL2026"
             placeholderTextColor={colors.textFaint}
             autoCapitalize="characters"
+            autoCorrect={false}
+            maxLength={50}
             value={customCode}
-            onChangeText={setCustomCode}
+            onChangeText={handleChangeCode}
           />
         </View>
+        {codeError ? <Text style={[styles.hintText, { color: '#DC2626' }]}>{codeError}</Text> : null}
         <TouchableOpacity
           style={[styles.saveBtn, (!customCode.trim() || saving) && styles.saveBtnDisabled]}
           activeOpacity={0.85}
@@ -144,6 +319,40 @@ export default function ReferEarn({ navigate, user }) {
         >
           {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.saveBtnText}>Save New Code</Text>}
         </TouchableOpacity>
+
+        <View style={styles.tabs}>
+          {[['rewards', 'Rewards'], ['users', 'Referred Friends']].map(([key, label]) => (
+            <TouchableOpacity
+              key={key}
+              onPress={() => setTab(key)}
+              activeOpacity={0.8}
+              style={[styles.tab, { backgroundColor: tab === key ? BRAND : colors.card, borderColor: colors.border }]}
+            >
+              <Text style={[styles.tabText, { color: tab === key ? '#FFFFFF' : colors.textMuted }]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={[styles.listCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          {activeQuery.isLoading ? (
+            <ActivityIndicator color={BRAND} style={{ marginVertical: 20 }} />
+          ) : activeQuery.error ? (
+            <Text style={[styles.emptyText, { color: colors.textFaint }]}>
+              {activeQuery.error.isUnavailable ? 'Not available yet.' : activeQuery.error.message}
+            </Text>
+          ) : activeRows.length === 0 ? (
+            <Text style={[styles.emptyText, { color: colors.textFaint }]}>
+              {tab === 'rewards' ? 'No rewards yet. Share your code to start earning.' : "Nobody has signed up with your code yet."}
+            </Text>
+          ) : (
+            activeRows.map(tab === 'rewards' ? renderRewardRow : renderUserRow)
+          )}
+        </View>
+        {!activeQuery.isLoading && activeRows.length >= PREVIEW_ROWS ? (
+          <Text style={[styles.hintText, { color: colors.textFaint }]}>
+            Showing your latest {PREVIEW_ROWS} of {toTotal(activeQuery.data, activeRows.length)}.
+          </Text>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -193,6 +402,20 @@ const styles = StyleSheet.create({
   },
   codeText: { flex: 1, fontFamily: FONTS.extrabold, fontSize: 16, letterSpacing: 1, marginRight: 10 },
   copyBtn: { padding: 4 },
+  statsGrid: { flexDirection: 'row', gap: 10 },
+  statCard: { flex: 1, borderRadius: 14, borderWidth: 1, paddingVertical: 14, paddingHorizontal: 10, alignItems: 'center' },
+  statValue: { fontFamily: FONTS.extrabold, fontSize: 15 },
+  statLabel: { fontFamily: FONTS.medium, fontSize: 11, marginTop: 4 },
+  tabs: { flexDirection: 'row', gap: 10, marginTop: 26, marginBottom: 12 },
+  tab: { flex: 1, height: 40, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  tabText: { fontFamily: FONTS.semibold, fontSize: 13 },
+  listCard: { borderRadius: 16, borderWidth: 1, paddingHorizontal: 14 },
+  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
+  rowTitle: { fontFamily: FONTS.semibold, fontSize: 13.5 },
+  rowSub: { fontFamily: FONTS.regular, fontSize: 11.5, marginTop: 2 },
+  rowAmount: { fontFamily: FONTS.bold, fontSize: 13.5 },
+  rowStatus: { fontFamily: FONTS.semibold, fontSize: 11, marginTop: 2 },
+  emptyText: { fontFamily: FONTS.regular, fontSize: 12.5, textAlign: 'center', paddingVertical: 22 },
   hintText: { fontFamily: FONTS.regular, fontSize: 11.5, marginTop: 8, lineHeight: 16 },
 
   shareBtn: {

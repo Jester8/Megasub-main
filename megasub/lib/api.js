@@ -705,11 +705,32 @@ export function resolveGenerationBank(option) {
   return { code: GENERATION_BANK_CODE, label };
 }
 
-// ── Referral Code ───────────────────────────────────────────────────
-// Setting a custom referral_code takes priority over the user's phone
-// number as their shareable referral identifier.
-export const updateReferralCode = ({ userId, referralCode }) =>
-  request('update_referral_code', { method: 'PUT', body: { user_id: userId, referral_code: referralCode } });
+// ── Referrals — V2 ──────────────────────────────────────────────────
+// Mega-sub-only. The backend derives the owner from the bearer token, so none
+// of these send a user_id — customers can only ever see their own downline.
+export const fetchReferralSummary = () => request('referrals/summary');
+
+export const fetchReferredUsers = ({ perPage = 20, page } = {}) =>
+  request('referrals/referred-users', { params: { per_page: perPage, page } });
+
+// status / rewardKind / serviceType are optional ledger filters.
+export const fetchReferralRewards = ({ status, rewardKind, serviceType, perPage = 20, page } = {}) =>
+  request('referrals/rewards', {
+    params: { status, reward_kind: rewardKind, service_type: serviceType, per_page: perPage, page },
+  });
+
+// Codes are 3-50 chars (letters, numbers, _ and -) and unique. A taken code
+// answers 422 { message, errors: { referral_code: [...] } } — the field
+// message is attached as error.fieldMessage so the screen can show it inline.
+export const updateReferralCode = async ({ referralCode }) => {
+  try {
+    return await request('referrals/code', { method: 'PUT', body: { referral_code: referralCode } });
+  } catch (error) {
+    const fieldMessage = error?.payload?.errors?.referral_code?.[0];
+    if (fieldMessage) error.fieldMessage = fieldMessage;
+    throw error;
+  }
+};
 
 // ── Coupons ─────────────────────────────────────────────────────────
 export const fetchActiveCoupons = (userId) =>
