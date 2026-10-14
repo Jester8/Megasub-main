@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Pressable, Animated, StyleSheet, Platform } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { View, Text, Pressable, Animated, StyleSheet } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../contexts/ThemeContext';
@@ -20,8 +19,8 @@ const TABS = [
 ];
 
 function TabButton({ tab, isActive, isTablet, colors, isDark, onPress }) {
-  // White reads best on the dark glass; the brand colour is used on light.
-  const activeColor = isDark ? '#FFFFFF' : colors.brand;
+  // Brand blue on light, white on dark.
+  const activeColor = colors.brandText;
   // Dark-mode text is all white, so inactive tabs are dimmed to keep the active one obvious.
   const inactiveColor = isDark ? 'rgba(255,255,255,0.5)' : colors.textFaint;
   // 0 = inactive, 1 = active. Drives the icon lift and scale.
@@ -78,40 +77,33 @@ export default function BottomNav({ activeTab, onTabPress }) {
   const { isTablet, content } = useResponsive();
 
   return (
-    <View style={[styles.outerWrap, { paddingBottom: insets.bottom + 10 }]}>
-      <View style={[styles.pill, content]}>
-        {/* Frosted glass look: blur, a faint tint, and a light edge. */}
-        <BlurView
-          intensity={isDark ? 55 : 45}
-          tint={isDark ? 'dark' : 'light'}
-          experimentalBlurMethod={Platform.OS === 'android' ? 'dimezisBlurView' : undefined}
-          style={StyleSheet.absoluteFill}
-        />
-        <View
-          style={[
-            StyleSheet.absoluteFill,
-            { backgroundColor: isDark ? 'rgba(20,20,26,0.28)' : 'rgba(255,255,255,0.28)' },
-          ]}
-        />
-        <View
-          style={[
-            styles.pillBorder,
-            { borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.75)' },
-          ]}
-        />
-        <View style={styles.container}>
-          {TABS.map((tab) => (
-            <TabButton
-              key={tab.id}
-              tab={tab}
-              isActive={activeTab === tab.id}
-              isTablet={isTablet}
-              colors={colors}
-              isDark={isDark}
-              onPress={() => onTabPress && onTabPress(tab.id)}
-            />
-          ))}
-        </View>
+    // A flat bar that runs the full width of the screen and sits flush on its
+    // bottom edge: square corners, no side margins, a hairline on top. The
+    // bottom safe-area inset is padding *inside* the bar, so the bar's own
+    // surface carries on down behind the home indicator / system navigation.
+    <View
+      style={[
+        styles.bar,
+        {
+          backgroundColor: colors.card,
+          borderTopColor: colors.border,
+          paddingBottom: Math.max(insets.bottom, 8),
+        },
+      ]}
+    >
+      {/* The bar spans the screen; on a tablet only the tabs are held to the content column. */}
+      <View style={[styles.container, content]}>
+        {TABS.map((tab) => (
+          <TabButton
+            key={tab.id}
+            tab={tab}
+            isActive={activeTab === tab.id}
+            isTablet={isTablet}
+            colors={colors}
+            isDark={isDark}
+            onPress={() => onTabPress && onTabPress(tab.id)}
+          />
+        ))}
       </View>
     </View>
   );
@@ -120,32 +112,15 @@ export default function BottomNav({ activeTab, onTabPress }) {
 const styles = StyleSheet.create({
   // Sits in normal layout flow at the bottom of the screen, so content ends
   // above it instead of scrolling underneath.
-  outerWrap: {
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-  },
-  pill: {
+  bar: {
     width: '100%',
-    maxWidth: 520,
-    borderRadius: 32,
-    overflow: 'hidden',
-    shadowColor: '#0B0D1A',
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
-  },
-  pillBorder: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 32,
-    borderWidth: 1,
+    borderTopWidth: 1,
+    paddingTop: 8,
   },
   container: {
     flexDirection: 'row',
     width: '100%',
-    paddingVertical: 10,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
   },
   tab: {
     flex: 1,

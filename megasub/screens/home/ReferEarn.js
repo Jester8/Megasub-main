@@ -257,7 +257,7 @@ export default function ReferEarn({ navigate, user }) {
           {summaryQuery.isLoading ? (
             <ActivityIndicator color={BRAND} />
           ) : (
-            <Text style={[styles.codeText, { color: BRAND }]} numberOfLines={1}>{referralCode || 'Not set'}</Text>
+            <Text style={[styles.codeText, { color: colors.brandText }]} numberOfLines={1}>{referralCode || 'Not set'}</Text>
           )}
           <TouchableOpacity onPress={handleCopy} activeOpacity={0.7} style={styles.copyBtn} disabled={!referralCode}>
             <Feather name={copied ? 'check' : 'copy'} size={16} color={BRAND} />

@@ -123,6 +123,7 @@ export default function ScheduleSheet({
               value={when}
               mode="datetime"
               display="spinner"
+              themeVariant={colors?.mode === 'dark' ? 'dark' : 'light'}
               minimumDate={new Date()}
               onChange={onPick}
               style={styles.iosPicker}

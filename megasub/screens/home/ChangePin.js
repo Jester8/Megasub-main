@@ -176,7 +176,7 @@ export default function ChangePin({ navigate, user }) {
           ) : null}
 
           <TouchableOpacity style={styles.resendBtn} onPress={handleSendCode} activeOpacity={0.8} disabled={loading}>
-            <Text style={styles.resendText}>Resend Code</Text>
+            <Text style={[styles.resendText, { color: colors.brandText }]}>Resend Code</Text>
           </TouchableOpacity>
         </ScrollView>
       )}

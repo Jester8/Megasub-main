@@ -21,11 +21,11 @@ export default function ShareButtons({ sharing, onShareImage, colors }) {
         disabled={sharing !== null}
       >
         {sharing === 'image' ? (
-          <ActivityIndicator color={BRAND} size="small" />
+          <ActivityIndicator color={colors.brandText} size="small" />
         ) : (
           <>
-            <Feather name="image" size={16} color={BRAND} />
-            <Text style={styles.shareBtnText}>Share Receipt</Text>
+            <Feather name="image" size={16} color={colors.brandText} />
+            <Text style={[styles.shareBtnText, { color: colors.brandText }]}>Share Receipt</Text>
           </>
         )}
       </TouchableOpacity>

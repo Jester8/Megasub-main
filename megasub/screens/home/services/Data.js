@@ -317,7 +317,7 @@ export default function Data({ navigate, user }) {
                     ) : (
                       <View style={[styles.networkDot, { backgroundColor: color }]} />
                     )}
-                    <Text style={[styles.networkLabel, { color: colors.text }, active && styles.networkLabelActive]}>
+                    <Text style={[styles.networkLabel, { color: colors.text }, active && { color: colors.brandText }]}>
                       {n.network_name}
                     </Text>
                     {active && (
@@ -355,9 +355,6 @@ export default function Data({ navigate, user }) {
               <Feather name="user-plus" size={18} color={BRAND} />
             </TouchableOpacity>
           </View>
-          {phone.length > 0 && !isValidPhone(phone) && (
-            <Text style={styles.phoneErrorText}>Enter a valid 11-digit phone number</Text>
-          )}
 
           <CouponCheck userId={user?.id} colors={colors} productSlug="data" onApplied={setAppliedCoupon} />
 
@@ -447,7 +444,7 @@ export default function Data({ navigate, user }) {
             ) : null}
             <View style={styles.summaryRow}>
               <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Total Cost</Text>
-              <Text style={[styles.summaryValue, { color: BRAND, fontFamily: FONTS.bold }]}>
+              <Text style={[styles.summaryValue, { color: colors.brandText, fontFamily: FONTS.bold }]}>
                 ₦{formatNaira(appliedCoupon ? Math.max(0, Number(selectedPlan?.selling_price || 0) - appliedCoupon.amount) : selectedPlan?.selling_price)}
               </Text>
             </View>
@@ -521,14 +518,6 @@ export default function Data({ navigate, user }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#F7F8FC' },
-  phoneErrorText: {
-    fontFamily: FONTS.regular,
-    fontSize: 12,
-    color: '#D94F4F',
-    marginTop: -8,
-    marginBottom: 12,
-    marginLeft: 4,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -564,7 +553,6 @@ const styles = StyleSheet.create({
   networkDot: { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
   networkLogo: { width: 26, height: 26, borderRadius: 13, marginRight: 8 },
   networkLabel: { fontFamily: FONTS.semibold, fontSize: 13, color: '#0B0D1A', flex: 1 },
-  networkLabelActive: { color: BRAND },
   checkWrap: { width: 18, height: 18, borderRadius: 9, backgroundColor: BRAND, alignItems: 'center', justifyContent: 'center' },
   inputCard: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF',

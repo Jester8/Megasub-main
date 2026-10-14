@@ -14,6 +14,9 @@ export const LIGHT_COLORS = {
   textFaint: 'rgba(11,13,26,0.4)',
   divider: 'rgba(11,13,26,0.06)',
   brand: '#4A55DD',
+  // Brand-coloured *text* (links, totals, active labels). Buttons, borders and
+  // tints keep using `brand`; only text switches to white in dark mode.
+  brandText: '#4A55DD',
   statusBarStyle: 'dark-content',
 };
 
@@ -31,6 +34,7 @@ export const DARK_COLORS = {
   textFaint: '#FFFFFF',
   divider: 'rgba(245,246,250,0.08)',
   brand: '#6C76F5',
+  brandText: '#FFFFFF',
   statusBarStyle: 'light-content',
 };
 

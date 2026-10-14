@@ -210,7 +210,7 @@ export default function ChangePassword({ navigate, user }) {
               activeOpacity={0.8}
               disabled={countdown > 0 || loading}
             >
-              <Text style={[styles.resendText, { color: countdown > 0 ? colors.textFaint : BRAND }]}>
+              <Text style={[styles.resendText, { color: countdown > 0 ? colors.textFaint : colors.brandText }]}>
                 {countdown > 0 ? `Resend code in ${countdown}s` : 'Resend Code'}
               </Text>
             </TouchableOpacity>

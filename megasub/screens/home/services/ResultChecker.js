@@ -331,10 +331,10 @@ export default function ResultChecker({ navigate, user }) {
                     {EXAM_LOGOS[p.exam_type] ? (
                       <Image source={EXAM_LOGOS[p.exam_type]} style={styles.productLogo} resizeMode="contain" />
                     ) : null}
-                    <Text style={[styles.productLabel, { color: colors.text }, active && styles.productLabelActive]}>
+                    <Text style={[styles.productLabel, { color: colors.text }, active && { color: colors.brandText }]}>
                       {p.exam_type || p.name}
                     </Text>
-                    <Text style={[styles.productPrice, { color: colors.textMuted }, active && styles.productLabelActive]}>
+                    <Text style={[styles.productPrice, { color: colors.textMuted }, active && { color: colors.brandText }]}>
                       {p.purchase_available === false ? 'Coming soon' : `₦${formatNaira(p.price)} / PIN`}
                     </Text>
                     {active && (
@@ -397,7 +397,7 @@ export default function ResultChecker({ navigate, user }) {
               </View>
               <View style={styles.summaryRow}>
                 <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Total Cost</Text>
-                <Text style={[styles.summaryValue, { color: BRAND, fontFamily: FONTS.bold }]}>
+                <Text style={[styles.summaryValue, { color: colors.brandText, fontFamily: FONTS.bold }]}>
                   ₦{formatNaira(totalCost)}
                 </Text>
               </View>
@@ -425,7 +425,7 @@ export default function ResultChecker({ navigate, user }) {
             </View>
             <View style={styles.summaryRow}>
               <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Total Cost</Text>
-              <Text style={[styles.summaryValue, { color: BRAND, fontFamily: FONTS.bold }]}>
+              <Text style={[styles.summaryValue, { color: colors.brandText, fontFamily: FONTS.bold }]}>
                 ₦{formatNaira(totalCost)}
               </Text>
             </View>
@@ -519,7 +519,6 @@ const styles = StyleSheet.create({
   productLogo: { width: 28, height: 28, marginBottom: 6 },
   productLabel: { fontFamily: FONTS.semibold, fontSize: 14, color: '#0B0D1A', marginBottom: 4 },
   productPrice: { fontFamily: FONTS.medium, fontSize: 12, color: '#6B7088' },
-  productLabelActive: { color: BRAND },
   checkWrap: {
     position: 'absolute', top: 10, right: 10,
     width: 18, height: 18, borderRadius: 9, backgroundColor: BRAND, alignItems: 'center', justifyContent: 'center',

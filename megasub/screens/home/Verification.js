@@ -124,7 +124,7 @@ export default function Verification({ navigate, user }) {
                     onPress={() => setIdType(t)}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.typeLabel, { color: colors.text }, active && styles.typeLabelActive]}>{t.label}</Text>
+                    <Text style={[styles.typeLabel, { color: colors.text }, active && { color: colors.brandText }]}>{t.label}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -209,7 +209,6 @@ const styles = StyleSheet.create({
   },
   typeCardActive: { borderColor: BRAND, backgroundColor: 'rgba(74,85,221,0.06)' },
   typeLabel: { fontFamily: FONTS.bold, fontSize: 13.5, color: '#0B0D1A' },
-  typeLabelActive: { color: BRAND },
 
   inputCard: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF',

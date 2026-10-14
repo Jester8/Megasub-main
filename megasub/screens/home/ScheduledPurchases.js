@@ -342,8 +342,8 @@ export default function ScheduledPurchases({ navigate, user }) {
                           activeOpacity={0.85}
                           onPress={() => setEditVisible(true)}
                         >
-                          <Feather name="edit-2" size={15} color={BRAND} />
-                          <Text style={styles.outlineBtnText}>Change schedule</Text>
+                          <Feather name="edit-2" size={15} color={colors.brandText} />
+                          <Text style={[styles.outlineBtnText, { color: colors.brandText }]}>Change schedule</Text>
                         </TouchableOpacity>
                       </>
                     ) : null}
@@ -352,8 +352,8 @@ export default function ScheduledPurchases({ navigate, user }) {
                       activeOpacity={0.85}
                       onPress={() => openHistory(selected)}
                     >
-                      <Feather name="clock" size={15} color={BRAND} />
-                      <Text style={styles.outlineBtnText}>Execution history</Text>
+                      <Feather name="clock" size={15} color={colors.brandText} />
+                      <Text style={[styles.outlineBtnText, { color: colors.brandText }]}>Execution history</Text>
                     </TouchableOpacity>
                     {canAct ? (
                       <TouchableOpacity style={styles.dangerBtn} activeOpacity={0.7} onPress={() => confirmCancel(selected)}>

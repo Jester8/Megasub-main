@@ -313,7 +313,7 @@ export default function Bulk({ navigate, user }) {
                     ) : (
                       <View style={[styles.networkDot, { backgroundColor: color }]} />
                     )}
-                    <Text style={[styles.networkLabel, { color: colors.text }, active && styles.networkLabelActive]}>
+                    <Text style={[styles.networkLabel, { color: colors.text }, active && { color: colors.brandText }]}>
                       {n.network_name}
                     </Text>
                     {active && (
@@ -348,7 +348,7 @@ export default function Bulk({ navigate, user }) {
 
           <View style={styles.labelRow}>
             <Text style={[styles.sectionLabel, { color: colors.textMuted, marginTop: 22 }]}>Recipients</Text>
-            <Text style={[styles.countBadge, { color: recipients.length ? BRAND : colors.textFaint }]}>
+            <Text style={[styles.countBadge, { color: recipients.length ? colors.brandText : colors.textFaint }]}>
               {recipients.length} number{recipients.length === 1 ? '' : 's'}
             </Text>
           </View>
@@ -358,8 +358,8 @@ export default function Bulk({ navigate, user }) {
             activeOpacity={0.8}
             onPress={() => setContactPickerVisible(true)}
           >
-            <Feather name="user-plus" size={16} color={BRAND} />
-            <Text style={styles.pickContactsText}>Pick from Contacts</Text>
+            <Feather name="user-plus" size={16} color={colors.brandText} />
+            <Text style={[styles.pickContactsText, { color: colors.brandText }]}>Pick from Contacts</Text>
           </TouchableOpacity>
 
           <View style={[styles.textAreaCard, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 12 }]}>
@@ -384,7 +384,7 @@ export default function Bulk({ navigate, user }) {
 
           <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Amount (per recipient)</Text>
           <View style={[styles.inputCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={styles.nairaSign}>₦</Text>
+            <Text style={[styles.nairaSign, { color: colors.brandText }]}>₦</Text>
             <View style={[styles.inputDivider, { backgroundColor: colors.border }]} />
             <TextInput
               style={[styles.input, { color: colors.text }]}
@@ -415,7 +415,7 @@ export default function Bulk({ navigate, user }) {
           {recipients.length > 0 && amount ? (
             <View style={[styles.totalCard, { backgroundColor: colors.cardAlt, borderColor: colors.border }]}>
               <Text style={[styles.totalLabel, { color: colors.textMuted }]}>Total for {recipients.length} recipients</Text>
-              <Text style={[styles.totalValue, { color: BRAND }]}>₦{totalCost.toLocaleString()}</Text>
+              <Text style={[styles.totalValue, { color: colors.brandText }]}>₦{totalCost.toLocaleString()}</Text>
             </View>
           ) : null}
         </ScrollView>
@@ -445,7 +445,7 @@ export default function Bulk({ navigate, user }) {
             </View>
             <View style={styles.summaryRow}>
               <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Total Cost</Text>
-              <Text style={[styles.summaryValue, { color: BRAND, fontFamily: FONTS.bold }]}>₦{totalCost.toLocaleString()}</Text>
+              <Text style={[styles.summaryValue, { color: colors.brandText, fontFamily: FONTS.bold }]}>₦{totalCost.toLocaleString()}</Text>
             </View>
           </View>
 
@@ -552,7 +552,6 @@ const styles = StyleSheet.create({
   networkDot: { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
   networkLogo: { width: 26, height: 26, borderRadius: 13, marginRight: 8 },
   networkLabel: { fontFamily: FONTS.semibold, fontSize: 13, color: '#0B0D1A', flex: 1 },
-  networkLabelActive: { color: BRAND },
   checkWrap: { width: 18, height: 18, borderRadius: 9, backgroundColor: BRAND, alignItems: 'center', justifyContent: 'center' },
 
   textAreaCard: {

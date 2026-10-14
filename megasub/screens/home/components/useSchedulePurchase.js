@@ -5,6 +5,7 @@ import { createScheduledPurchase } from '../../../lib/api';
 import { requireNetworkOrShowError } from '../../../lib/network';
 import { alertForPurchaseError } from '../../../lib/format';
 import { SCHEDULE_TIMEZONE, toLagosIso, formatWhen } from '../../../lib/schedule';
+import { useTheme } from '../../../contexts/ThemeContext';
 
 const BRAND = '#4A55DD';
 
@@ -84,23 +85,25 @@ export default function useSchedulePurchase({ user, navigate, serviceType, getPu
   };
 }
 
-// The "Schedule this purchase" link shown under the Pay button.
+// The "Schedule this purchase" link shown under the Pay button. Brand blue in
+// light mode, white in dark mode. It stays disabled until the PIN is entered;
+// the dimming is kept lighter in dark mode so the white text still reads.
 export function ScheduleLink({ onPress, disabled }) {
+  const { colors } = useTheme();
   return (
     <TouchableOpacity
-      style={[styles.link, disabled && styles.linkDisabled]}
+      style={[styles.link, disabled && { opacity: colors.mode === 'dark' ? 0.7 : 0.45 }]}
       activeOpacity={0.7}
       onPress={onPress}
       disabled={disabled}
     >
-      <Feather name="calendar" size={15} color={BRAND} />
-      <Text style={styles.linkText}>Schedule this purchase</Text>
+      <Feather name="calendar" size={15} color={colors.brandText} />
+      <Text style={[styles.linkText, { color: colors.brandText }]}>Schedule this purchase</Text>
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   link: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12 },
-  linkDisabled: { opacity: 0.45 },
   linkText: { fontFamily: 'Montserrat_600SemiBold', fontSize: 13.5, color: BRAND },
 });

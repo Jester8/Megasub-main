@@ -123,11 +123,11 @@ function MarqueeBanner({ text, colors }) {
             style={{ flexDirection: 'row' }}
             onLayout={(e) => setCopyWidth(e.nativeEvent.layout.width)}
           >
-            <Text style={[marqueeStyles.text, { color: BRAND }]} numberOfLines={1}>{text}</Text>
+            <Text style={[marqueeStyles.text, { color: colors.brandText }]} numberOfLines={1}>{text}</Text>
             <View style={{ width: MARQUEE_GAP }} />
           </View>
           <View style={{ flexDirection: 'row' }}>
-            <Text style={[marqueeStyles.text, { color: BRAND }]} numberOfLines={1}>{text}</Text>
+            <Text style={[marqueeStyles.text, { color: colors.brandText }]} numberOfLines={1}>{text}</Text>
             <View style={{ width: MARQUEE_GAP }} />
           </View>
         </Animated.View>
@@ -472,11 +472,11 @@ export default function TopUp({ navigate, user }) {
                   disabled={generatingCode === bank.code || blockedByPhone}
                 >
                   {generatingCode === bank.code ? (
-                    <ActivityIndicator color={BRAND} size="small" />
+                    <ActivityIndicator color={colors.brandText} size="small" />
                   ) : (
                     <>
-                      <Ionicons name="add-circle-outline" size={18} color={BRAND} />
-                      <Text style={styles.generateBtnText}>
+                      <Ionicons name="add-circle-outline" size={18} color={colors.brandText} />
+                      <Text style={[styles.generateBtnText, { color: colors.brandText }]}>
                         {needPhone ? 'Verify Phone & Generate Account' : `Generate ${bank.label} Account`}
                       </Text>
                     </>
