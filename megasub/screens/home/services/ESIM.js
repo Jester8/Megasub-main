@@ -350,7 +350,7 @@ export default function ESIM({ navigate, user }) {
                       {p.data_size} · Valid {p.validity_days} days
                     </Text>
                   </View>
-                  <Text style={[styles.planPrice, active && { color: BRAND }]}>{formatUsd(p.price, p.currency)}</Text>
+                  <Text style={[styles.planPrice, active && { color: colors.brandText }]}>{formatUsd(p.price, p.currency)}</Text>
                 </TouchableOpacity>
               );
             })
@@ -370,7 +370,7 @@ export default function ESIM({ navigate, user }) {
             </View>
             <View style={styles.summaryRow}>
               <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Total Cost</Text>
-              <Text style={[styles.summaryValue, { color: BRAND, fontFamily: FONTS.bold }]}>
+              <Text style={[styles.summaryValue, { color: colors.brandText, fontFamily: FONTS.bold }]}>
                 {formatUsd(selectedPlan?.price, selectedPlan?.currency)}
               </Text>
             </View>

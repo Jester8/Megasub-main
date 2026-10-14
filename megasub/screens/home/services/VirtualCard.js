@@ -119,7 +119,7 @@ function FeeSummary({ amountLabel, amount, product, colors, style }) {
       {total !== null ? (
         <View style={styles.summaryRow}>
           <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Total</Text>
-          <Text style={[styles.summaryValue, { color: BRAND, fontFamily: FONTS.bold }]}>{formatUsd(total)}</Text>
+          <Text style={[styles.summaryValue, { color: colors.brandText, fontFamily: FONTS.bold }]}>{formatUsd(total)}</Text>
         </View>
       ) : null}
       {maintenance > 0 && maintenanceInterval && maintenanceInterval !== 'none' ? (
@@ -408,8 +408,8 @@ function CardDetailModal({ card, visible, onClose, colors, userId, product, onCh
                   </TouchableOpacity>
                 </View>
                 <TouchableOpacity style={styles.revealBtn} onPress={() => setDetails(null)} activeOpacity={0.7}>
-                  <Feather name="eye-off" size={15} color={BRAND} />
-                  <Text style={styles.revealBtnText}>Hide details</Text>
+                  <Feather name="eye-off" size={15} color={colors.brandText} />
+                  <Text style={[styles.revealBtnText, { color: colors.brandText }]}>Hide details</Text>
                 </TouchableOpacity>
               </>
             ) : (
@@ -420,11 +420,11 @@ function CardDetailModal({ card, visible, onClose, colors, userId, product, onCh
                 activeOpacity={0.7}
               >
                 {loadingDetails ? (
-                  <ActivityIndicator color={BRAND} />
+                  <ActivityIndicator color={colors.brandText} />
                 ) : (
                   <>
-                    <Feather name="eye" size={15} color={BRAND} />
-                    <Text style={styles.revealBtnText}>Show card details</Text>
+                    <Feather name="eye" size={15} color={colors.brandText} />
+                    <Text style={[styles.revealBtnText, { color: colors.brandText }]}>Show card details</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -445,7 +445,7 @@ function CardDetailModal({ card, visible, onClose, colors, userId, product, onCh
 
           <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Fund Card</Text>
           <View style={[styles.inputCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={styles.nairaSign}>{cardSymbol(card.currency)}</Text>
+            <Text style={[styles.nairaSign, { color: colors.brandText }]}>{cardSymbol(card.currency)}</Text>
             <View style={[styles.inputDivider, { backgroundColor: colors.border }]} />
             <TextInput
               style={[styles.input, { color: colors.text }]}
@@ -821,8 +821,8 @@ export default function VirtualCard({ navigate, user }) {
                 disabled={!t.enabled}
                 onPress={() => setSelectedTypeId(t.id)}
               >
-                <Feather name="credit-card" size={20} color={active ? BRAND : colors.textMuted} />
-                <Text style={[styles.typeLabel, { color: colors.text }, active && { color: BRAND }]}>{t.label}</Text>
+                <Feather name="credit-card" size={20} color={active ? colors.brandText : colors.textMuted} />
+                <Text style={[styles.typeLabel, { color: colors.text }, active && { color: colors.brandText }]}>{t.label}</Text>
                 {t.comingSoon ? <Text style={[styles.soonTag, { color: colors.textFaint }]}>Coming soon</Text> : null}
                 {active && (
                   <View style={styles.checkWrap}>

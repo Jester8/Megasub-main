@@ -163,8 +163,8 @@ export default function MyESIMs({ navigate, user }) {
 
                 {status.installable ? (
                   <TouchableOpacity style={styles.toggleRow} onPress={() => setExpandedId(open ? null : id)} activeOpacity={0.7}>
-                    <Text style={styles.toggleText}>{open ? 'Hide install details' : 'Show install details'}</Text>
-                    <Feather name={open ? 'chevron-up' : 'chevron-down'} size={16} color={BRAND} />
+                    <Text style={[styles.toggleText, { color: colors.brandText }]}>{open ? 'Hide install details' : 'Show install details'}</Text>
+                    <Feather name={open ? 'chevron-up' : 'chevron-down'} size={16} color={colors.brandText} />
                   </TouchableOpacity>
                 ) : null}
 

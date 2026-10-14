@@ -175,7 +175,7 @@ export default function ContactPicker({ visible, onClose, onDone, colors, multi 
                     {isSelected ? (
                       <Feather name="check" size={16} color="#FFFFFF" />
                     ) : (
-                      <Text style={styles.avatarText}>{item.name.charAt(0).toUpperCase()}</Text>
+                      <Text style={[styles.avatarText, { color: colors.brandText }]}>{item.name.charAt(0).toUpperCase()}</Text>
                     )}
                   </View>
                   <View style={styles.rowInfo}>

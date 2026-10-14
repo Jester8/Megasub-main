@@ -338,7 +338,7 @@ export default function Cable({ navigate, user }) {
             ) : null}
             <View style={styles.summaryRow}>
               <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Total Cost</Text>
-              <Text style={[styles.summaryValue, { color: BRAND, fontFamily: FONTS.bold }]}>₦{formatNaira(selectedPackage?.price)}</Text>
+              <Text style={[styles.summaryValue, { color: colors.brandText, fontFamily: FONTS.bold }]}>₦{formatNaira(selectedPackage?.price)}</Text>
             </View>
           </View>
 

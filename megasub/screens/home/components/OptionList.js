@@ -39,7 +39,7 @@ export default function OptionList({ options, selectedId, onSelect, colors, hori
               <View style={styles.hTop}>
                 {opt.logo ? <Image source={opt.logo} style={styles.hLogo} /> : null}
                 <Text
-                  style={[styles.hLabel, { color: colors.text }, active && { color: colors.brand }]}
+                  style={[styles.hLabel, { color: colors.text }, active && { color: colors.brandText }]}
                   numberOfLines={1}
                 >
                   {opt.label}
@@ -79,7 +79,7 @@ export default function OptionList({ options, selectedId, onSelect, colors, hori
           >
             <View style={styles.textWrap}>
               <Text
-                style={[styles.label, { color: colors.text }, active && { color: colors.brand }]}
+                style={[styles.label, { color: colors.text }, active && { color: colors.brandText }]}
                 numberOfLines={1}
               >
                 {opt.label}

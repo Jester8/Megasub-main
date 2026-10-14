@@ -97,7 +97,7 @@ export default function CouponCheck({ userId, colors, productSlug, onApplied }) 
                   onPress={() => handleSelectCoupon(coupon)}
                 >
                   <View style={styles.couponCardTop}>
-                    <Text style={[styles.couponCode, { color: BRAND }]} numberOfLines={1}>{coupon.code}</Text>
+                    <Text style={[styles.couponCode, { color: colors.brandText }]} numberOfLines={1}>{coupon.code}</Text>
                     <Text style={styles.couponAmount}>₦{formatNaira(coupon.amount)} off</Text>
                   </View>
                   <Text style={[styles.couponMeta, { color: colors.textMuted }]} numberOfLines={1}>

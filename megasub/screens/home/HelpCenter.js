@@ -108,7 +108,7 @@ export default function HelpCenter({ navigate }) {
           activeOpacity={0.85}
           onPress={() => navigate && navigate('contact-support')}
         >
-          <Text style={styles.contactBtnText}>Still need help? Contact Support</Text>
+          <Text style={[styles.contactBtnText, { color: colors.brandText }]}>Still need help? Contact Support</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>

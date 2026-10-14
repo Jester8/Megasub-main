@@ -282,8 +282,8 @@ export default function TransactionHistory({ navigate, user }) {
           activeOpacity={0.8}
           onPress={() => setActiveSheet('category')}
         >
-          <Feather name="tag" size={14} color={selectedCategory !== 'all' ? BRAND : colors.textMuted} />
-          <Text style={[styles.filterText, { color: selectedCategory !== 'all' ? BRAND : colors.text }]} numberOfLines={1}>
+          <Feather name="tag" size={14} color={selectedCategory !== 'all' ? colors.brandText : colors.textMuted} />
+          <Text style={[styles.filterText, { color: selectedCategory !== 'all' ? colors.brandText : colors.text }]} numberOfLines={1}>
             {categoryLabel}
           </Text>
           <Feather name="chevron-down" size={14} color={colors.textMuted} />
@@ -298,8 +298,8 @@ export default function TransactionHistory({ navigate, user }) {
           activeOpacity={0.8}
           onPress={() => setActiveSheet('status')}
         >
-          <Feather name="filter" size={14} color={selectedStatus !== 'all' ? BRAND : colors.textMuted} />
-          <Text style={[styles.filterText, { color: selectedStatus !== 'all' ? BRAND : colors.text }]} numberOfLines={1}>
+          <Feather name="filter" size={14} color={selectedStatus !== 'all' ? colors.brandText : colors.textMuted} />
+          <Text style={[styles.filterText, { color: selectedStatus !== 'all' ? colors.brandText : colors.text }]} numberOfLines={1}>
             {statusLabel}
           </Text>
           <Feather name="chevron-down" size={14} color={colors.textMuted} />
@@ -378,7 +378,7 @@ export default function TransactionHistory({ navigate, user }) {
                   }}
                   activeOpacity={0.75}
                 >
-                  <Text style={[styles.sheetItemLabel, { color: active ? BRAND : colors.text }]}>
+                  <Text style={[styles.sheetItemLabel, { color: active ? colors.brandText : colors.text }]}>
                     {option === 'Custom' ? 'Custom Range' : option}
                   </Text>
                   {active ? <Ionicons name="checkmark" size={18} color={BRAND} /> : null}
@@ -487,7 +487,7 @@ export default function TransactionHistory({ navigate, user }) {
                   }}
                   activeOpacity={0.75}
                 >
-                  <Text style={[styles.sheetItemLabel, { color: active ? BRAND : colors.text }]}>{option.label}</Text>
+                  <Text style={[styles.sheetItemLabel, { color: active ? colors.brandText : colors.text }]}>{option.label}</Text>
                   {active ? <Ionicons name="checkmark" size={18} color={BRAND} /> : null}
                 </TouchableOpacity>
               );
@@ -521,7 +521,7 @@ export default function TransactionHistory({ navigate, user }) {
                 >
                   <View style={styles.statusOptionLeft}>
                     <View style={[styles.statusDot, { backgroundColor: dotColor }]} />
-                    <Text style={[styles.sheetItemLabel, { color: active ? BRAND : colors.text }]}>{option.label}</Text>
+                    <Text style={[styles.sheetItemLabel, { color: active ? colors.brandText : colors.text }]}>{option.label}</Text>
                   </View>
                   {active ? <Ionicons name="checkmark" size={18} color={BRAND} /> : null}
                 </TouchableOpacity>

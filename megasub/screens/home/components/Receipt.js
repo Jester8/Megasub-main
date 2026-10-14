@@ -34,7 +34,7 @@ const Receipt = forwardRef(function Receipt(
       {subtitle ? <Text style={[styles.subtitle, { color: colors.textMuted }]}>{subtitle}</Text> : null}
 
       {amount != null ? (
-        <Text style={styles.amount}>₦{Number(amount).toLocaleString()}</Text>
+        <Text style={[styles.amount, { color: colors.brandText }]}>₦{Number(amount).toLocaleString()}</Text>
       ) : null}
 
       {rows && rows.length > 0 ? (

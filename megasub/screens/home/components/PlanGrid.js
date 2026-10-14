@@ -29,18 +29,18 @@ export default function PlanGrid({ plans, selectedId, onSelect, colors }) {
             activeOpacity={0.85}
           >
             {p.meta ? (
-              <Text style={[styles.meta, { color: colors.brand }]} numberOfLines={1}>
+              <Text style={[styles.meta, { color: colors.brandText }]} numberOfLines={1}>
                 {p.meta}
               </Text>
             ) : null}
             <Text
-              style={[styles.title, { color: colors.text }, active && { color: colors.brand }]}
+              style={[styles.title, { color: colors.text }, active && { color: colors.brandText }]}
             >
               {p.title}
             </Text>
             {p.price != null ? (
               <Text
-                style={[styles.price, { color: colors.text }, active && { color: colors.brand }]}
+                style={[styles.price, { color: colors.text }, active && { color: colors.brandText }]}
                 numberOfLines={1}
               >
                 ₦{Number(p.price).toLocaleString()}

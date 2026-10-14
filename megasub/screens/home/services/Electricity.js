@@ -357,7 +357,7 @@ export default function Electricity({ navigate, user }) {
 
           <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Amount</Text>
           <View style={[styles.inputCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={styles.nairaSign}>₦</Text>
+            <Text style={[styles.nairaSign, { color: colors.brandText }]}>₦</Text>
             <View style={[styles.inputDivider, { backgroundColor: colors.border }]} />
             <TextInput
               style={[styles.input, { color: colors.text }]}
@@ -425,7 +425,7 @@ export default function Electricity({ navigate, user }) {
             ) : null}
             <View style={styles.summaryRow}>
               <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Total Cost</Text>
-              <Text style={[styles.summaryValue, { color: BRAND, fontFamily: FONTS.bold }]}>₦{formatNaira(amount)}</Text>
+              <Text style={[styles.summaryValue, { color: colors.brandText, fontFamily: FONTS.bold }]}>₦{formatNaira(amount)}</Text>
             </View>
           </View>
 
