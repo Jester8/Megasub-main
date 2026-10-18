@@ -22,7 +22,7 @@ import PlanGrid from '../components/PlanGrid';
 import SuccessView from '../components/SuccessView';
 import ContactPicker from '../components/ContactPicker';
 import WrongPinModal from '../components/WrongPinModal';
-import { formatNaira, alertForPurchaseError, stripNetworkPrefix, sanitizePositiveInt } from '../../../lib/format';
+import { formatNaira, alertForPurchaseError, stripNetworkPrefix, sanitizePositiveInt, requestErrorTitle } from '../../../lib/format';
 
 const FONTS = {
   regular: 'Montserrat_400Regular',
@@ -172,7 +172,7 @@ export default function Bulk({ navigate, user }) {
       setCategories(list);
       if (list.length > 0) setSelectedCategory(list[0]);
     } catch (error) {
-      Alert.alert('Network Error', error.message || 'Could not load recharge types.');
+      Alert.alert(requestErrorTitle(error), error.message || 'Could not load recharge types.');
     } finally {
       setLoadingCategories(false);
     }
@@ -187,7 +187,7 @@ export default function Bulk({ navigate, user }) {
       setPlans(list);
       if (list.length > 0) setSelectedPlan(list[0]);
     } catch (error) {
-      Alert.alert('Network Error', error.message || 'Could not load airtime plans.');
+      Alert.alert(requestErrorTitle(error), error.message || 'Could not load airtime plans.');
     } finally {
       setLoadingPlans(false);
     }

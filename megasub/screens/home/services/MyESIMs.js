@@ -13,7 +13,7 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchMyEsims } from '../../../lib/api';
 import { useTheme } from '../../../contexts/ThemeContext';
-import { formatUsd } from '../../../lib/format';
+import { formatUsd, requestErrorTitle } from '../../../lib/format';
 import UnavailableNotice from '../components/UnavailableNotice';
 import EsimInstallCard from '../components/EsimInstallCard';
 
@@ -75,7 +75,7 @@ export default function MyESIMs({ navigate, user }) {
       setEsims(json.data || []);
     } catch (error) {
       if (error.isUnavailable) setUnavailableMessage(error.message);
-      else Alert.alert('Network Error', error.message || 'Could not load your eSIMs.');
+      else Alert.alert(requestErrorTitle(error), error.message || 'Could not load your eSIMs.');
     } finally {
       setLoading(false);
       setRefreshing(false);

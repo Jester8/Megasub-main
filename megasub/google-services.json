@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "850979649330",
+    "project_id": "megasub-1c74f",
+    "storage_bucket": "megasub-1c74f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:850979649330:android:a67efdd29b90c61809092b",
+        "android_client_info": {
+          "package_name": "com.anonymous.megasub"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBzyKg7NPcVg3VQCRywjemKT2vCMlE1OIk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

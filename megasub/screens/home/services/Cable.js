@@ -23,7 +23,7 @@ import SuccessView from '../components/SuccessView';
 import WrongPinModal from '../components/WrongPinModal';
 import ScheduleSheet from '../components/ScheduleSheet';
 import useSchedulePurchase, { ScheduleLink } from '../components/useSchedulePurchase';
-import { formatNaira, alertForPurchaseError } from '../../../lib/format';
+import { formatNaira, alertForPurchaseError, requestErrorTitle } from '../../../lib/format';
 
 const FONTS = {
   regular: 'Montserrat_400Regular',
@@ -141,7 +141,7 @@ export default function Cable({ navigate, user }) {
 
   useEffect(() => {
     if (catalogError) {
-      Alert.alert('Network Error', catalogErrorObj?.message || 'Could not load cable providers.');
+      Alert.alert(requestErrorTitle(catalogErrorObj), catalogErrorObj?.message || 'Could not load cable providers.');
     }
   }, [catalogError]);
 

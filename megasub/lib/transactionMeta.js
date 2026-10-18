@@ -5,6 +5,7 @@ export const CATEGORY_STYLE = {
   data: { icon: 'wifi-outline', color: '#00C9A7', bg: 'rgba(0,201,167,0.08)' },
   utility_bills: { icon: 'flash-outline', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
   cable_subscription: { icon: 'tv-outline', color: '#EC4899', bg: 'rgba(236,72,153,0.08)' },
+  result_checker: { icon: 'book-outline', color: '#10B981', bg: 'rgba(16,185,129,0.08)' },
 };
 
 export const DEFAULT_STYLE = { icon: 'briefcase-outline', color: '#4A55DD', bg: 'rgba(74,85,221,0.08)' };
@@ -23,6 +24,7 @@ export const CATEGORY_OPTIONS = [
   { id: 'data', label: 'Data' },
   { id: 'cable_subscription', label: 'Cable TV' },
   { id: 'utility_bills', label: 'Electricity' },
+  { id: 'result_checker', label: 'Result Checker' },
 ];
 
 export const STATUS_OPTIONS = [
@@ -31,6 +33,13 @@ export const STATUS_OPTIONS = [
   { id: '0', label: 'Pending' },
   { id: '-1', label: 'Failed' },
 ];
+
+// fetch_transactions tags these result_checker, with product_plan_id
+// "waec_result_checker" / "neco_result_checker" as a fallback signal.
+export function isResultCheckerTransaction(transaction) {
+  return transaction?.transaction_category === 'result_checker'
+    || /result_checker/i.test(transaction?.product_plan_id || '');
+}
 
 export function formatDate(isoString) {
   const date = new Date(isoString);

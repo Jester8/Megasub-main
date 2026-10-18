@@ -50,7 +50,12 @@ const Receipt = forwardRef(function Receipt(
               <Text style={[styles.rowLabel, { color: colors.textMuted }]}>{row.label}</Text>
               <View style={styles.rowValueWrap}>
                 {row.logo ? <Image source={row.logo} style={styles.rowLogo} /> : null}
-                <Text style={[styles.rowValue, { color: colors.text }]} numberOfLines={1}>{row.value}</Text>
+                <Text
+                  style={[styles.rowValue, { color: colors.text }]}
+                  numberOfLines={row.multiline ? undefined : 1}
+                >
+                  {row.value}
+                </Text>
               </View>
             </View>
           ))}

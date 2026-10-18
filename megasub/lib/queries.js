@@ -4,9 +4,11 @@ import {
   fetchNetworks,
   fetchProducts,
   fetchTransactions,
+  fetchResultCheckerTransactions,
   fetchProductPlanCategories,
   fetchProductPlans,
 } from './api';
+import { loadSavedResultCheckerHistory } from './resultCheckerHistory';
 
 // Every server dataset the app shows lives under one of these keys, in the
 // one shared queryClient (lib/queryClient.js). lib/warmup.js prefetches
@@ -30,6 +32,8 @@ export const queryKeys = {
   networks: (userId) => ['networks', userId],
   products: (userId) => ['products', userId],
   transactions: (userId, dateFrom, dateTo) => ['transactions', userId, dateFrom ?? '', dateTo ?? ''],
+  resultCheckerTransactions: (userId) => ['resultCheckerTransactions', userId],
+  savedResultCheckerHistory: (userId) => ['savedResultCheckerHistory', userId],
   // Cable/Electricity both fetch a fixed (network-independent) category+plan
   // catalog for one productSlug — one shared shape for both instead of a
   // bespoke query per screen.
@@ -97,5 +101,31 @@ export function useTransactionsQuery(userId, { dateFrom, dateTo } = {}) {
     enabled: !!userId,
     staleTime: STALE_TIMES.transactions,
     select: (json) => json?.data ?? [],
+  });
+}
+
+// fetch_result_checker_transactions carries the issued PINs (data[].pins),
+// RC reference and quantity that fetch_transactions lacks. ReceiptModal
+// matches a record to its transaction by transaction_id, or by exam board +
+// time for records without one.
+export function useResultCheckerTransactionsQuery(userId, { enabled = true } = {}) {
+  return useQuery({
+    queryKey: queryKeys.resultCheckerTransactions(userId),
+    queryFn: () => fetchResultCheckerTransactions(userId),
+    enabled: !!userId && enabled,
+    staleTime: STALE_TIMES.transactions,
+    select: (json) => (Array.isArray(json?.data) ? json.data : []),
+  });
+}
+
+// PINs saved on this device at purchase time (see lib/resultCheckerHistory.js).
+// Local-only, so never stale — ResultChecker.js writes it straight into the
+// cache after saving a new purchase.
+export function useSavedResultCheckerHistoryQuery(userId, { enabled = true } = {}) {
+  return useQuery({
+    queryKey: queryKeys.savedResultCheckerHistory(userId),
+    queryFn: () => loadSavedResultCheckerHistory(userId),
+    enabled: !!userId && enabled,
+    staleTime: Infinity,
   });
 }

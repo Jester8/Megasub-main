@@ -18,7 +18,7 @@ import { useTheme } from '../../../contexts/ThemeContext';
 import WrongPinModal from '../components/WrongPinModal';
 import UnavailableNotice from '../components/UnavailableNotice';
 import EsimInstallCard from '../components/EsimInstallCard';
-import { alertForPurchaseError, formatUsd } from '../../../lib/format';
+import { alertForPurchaseError, formatUsd, requestErrorTitle } from '../../../lib/format';
 
 const FONTS = {
   regular: 'Montserrat_400Regular',
@@ -119,7 +119,7 @@ export default function ESIM({ navigate, user }) {
       );
     } catch (error) {
       if (error.isUnavailable) setUnavailableMessage(error.message);
-      else Alert.alert('Network Error', error.message || 'Could not load countries.');
+      else Alert.alert(requestErrorTitle(error), error.message || 'Could not load countries.');
     } finally {
       setLoadingCountries(false);
     }
@@ -141,7 +141,7 @@ export default function ESIM({ navigate, user }) {
         setStep('country');
         setUnavailableMessage(error.message);
       } else {
-        Alert.alert('Network Error', error.message || 'Could not load plans for this country.');
+        Alert.alert(requestErrorTitle(error), error.message || 'Could not load plans for this country.');
       }
     } finally {
       setLoadingPlans(false);

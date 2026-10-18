@@ -17,6 +17,22 @@ const CABLE_LOGOS = [
   { match: 'STARTIMES', logo: require('../assets/networks/startimes.png') },
 ];
 
+const RESULT_CHECKER_LOGOS = [
+  { match: /\bWAEC\b/i, logo: require('../assets/result-checker/waec.png') },
+  { match: /\bNECO\b/i, logo: require('../assets/result-checker/neco.png') },
+];
+
+function resultCheckerLogo(tx) {
+  const details = tx.result_checker_details || {};
+  const product = tx.product || details.product || {};
+  const label = [
+    tx.transaction_category, tx.category, tx.description, tx.product_plan_name, tx.product_name, tx.exam_type,
+    details.description, details.product_plan_name, details.product_name, details.exam_type,
+    product.name, product.exam_type,
+  ].filter(Boolean).join(' ');
+  return RESULT_CHECKER_LOGOS.find((entry) => entry.match.test(label))?.logo || null;
+}
+
 export function cableLogo(label) {
   const upper = String(label || '').toUpperCase();
   return CABLE_LOGOS.find((c) => upper.includes(c.match))?.logo || null;
@@ -59,6 +75,10 @@ export function detectTransactionLogo(tx) {
   }
   if (category === 'utility_bills') {
     return discoLogo(tx.product_plan_name);
+  }
+  const transactionLabel = [category, tx.description, tx.product_plan_name, tx.product_name, tx.exam_type].filter(Boolean).join(' ');
+  if (category === 'result_checker' || /result.?checker|exam.?pin|\bwaec\b|\bneco\b/i.test(transactionLabel)) {
+    return resultCheckerLogo(tx);
   }
   return null;
 }

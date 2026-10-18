@@ -173,7 +173,7 @@ export default function VerifyScreen({ navigate, user }) {
   const phone_number = userData.phone_number || '';
 
   const [modalVisible, setModalVisible] = useState(false);
-  const [phoneNumber, setPhoneNumber] = useState(phone_number || '');
+  const [phoneNumber, setPhoneNumber] = useState(userData.signup_phone_number || phone_number);
   const [otp, setOtp] = useState('');
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
@@ -241,6 +241,7 @@ export default function VerifyScreen({ navigate, user }) {
       ...savedUserData,
       phone_verification: 1,
       phone_number: phoneNumber.trim(),
+      signup_phone_number: '',
     };
 
     setSavedUserData(updatedUser);

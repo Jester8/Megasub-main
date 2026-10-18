@@ -23,6 +23,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import BottomNav from './components/BottomNav';
 import { useTheme } from '../../contexts/ThemeContext';
 import { clearCachedVirtualAccounts, deleteAccount, updateFingerprintOption, fetchKycStatus } from '../../lib/api';
+import { unregisterPushDevice, forgetPushRegistration } from '../../lib/pushNotifications';
 
 const BIOMETRIC_LABEL = Platform.OS === 'ios' ? 'Face ID' : 'Fingerprint';
 
@@ -75,7 +76,11 @@ export default function Profile({ navigate, user }) {
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const isGoogleAccount = user?.auth_provider === 'google';
+  // Google/Apple-created accounts may have no password on file. The server's
+  // has_password (requested in the backend spec) wins when it's present.
+  const isPasswordless =
+    user?.has_password === false ||
+    (user?.has_password === undefined && (user?.auth_provider === 'google' || user?.auth_provider === 'apple'));
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(true);
   // BVN verification state from the server: true / false, or null until it is known.
@@ -173,6 +178,10 @@ export default function Profile({ navigate, user }) {
           // server field for either, so wiping it here would erase that
           // memory and force the user through phone + PIN setup again on
           // every single re-login.
+          // The device is unregistered first, while the session token still
+          // authenticates the call, so this phone stops getting the account's
+          // push alerts once nobody is signed in on it.
+          await unregisterPushDevice(user?.id);
           await SecureStore.deleteItemAsync(SESSION_KEY);
           // A different person may log in next on this device — the cached
           // account list belongs to whoever just logged out.
@@ -184,13 +193,13 @@ export default function Profile({ navigate, user }) {
   };
 
   // DELETE /delete_account permanently removes the account server-side.
-  // Google-created accounts may have no password on file, so it's sent only
+  // Google/Apple-created accounts may have no password on file, so it's sent only
   // when we know the account has one. Local data is only cleared after the
   // server confirms the delete — a wrong password or network failure must
   // not leave the device thinking the account is gone when it isn't.
   const handleDeleteAccount = async () => {
     if (deleteConfirmText.trim().toUpperCase() !== 'DELETE') return;
-    if (!isGoogleAccount && !deletePassword) {
+    if (!isPasswordless && !deletePassword) {
       Alert.alert('Password Required', 'Enter your password to confirm account deletion.');
       return;
     }
@@ -199,12 +208,14 @@ export default function Profile({ navigate, user }) {
     try {
       await deleteAccount({
         userId: user?.id,
-        password: isGoogleAccount ? undefined : deletePassword,
+        password: isPasswordless ? undefined : deletePassword,
       });
 
       await SecureStore.deleteItemAsync(SESSION_KEY);
       await SecureStore.deleteItemAsync(USER_KEY);
       clearCachedVirtualAccounts();
+      // The backend removes a deleted account's push devices itself.
+      forgetPushRegistration();
       setDeleteModalVisible(false);
       setDeleteConfirmText('');
       setDeletePassword('');
@@ -419,7 +430,7 @@ export default function Profile({ navigate, user }) {
             <Text style={[styles.deleteWarning, { color: colors.textMuted }]}>
               This permanently deletes your account and data from Megasub's servers. This cannot be undone.
             </Text>
-            {!isGoogleAccount && (
+            {!isPasswordless && (
               <>
                 <Text style={[styles.deleteLabel, { color: colors.textMuted }]}>Enter your password</Text>
                 <TextInput
@@ -445,7 +456,7 @@ export default function Profile({ navigate, user }) {
               style={[
                 styles.deleteBtn,
                 (deleteConfirmText.trim().toUpperCase() !== 'DELETE' ||
-                  (!isGoogleAccount && !deletePassword) ||
+                  (!isPasswordless && !deletePassword) ||
                   deleteLoading) &&
                   styles.deleteBtnDisabled,
               ]}
@@ -453,7 +464,7 @@ export default function Profile({ navigate, user }) {
               onPress={handleDeleteAccount}
               disabled={
                 deleteConfirmText.trim().toUpperCase() !== 'DELETE' ||
-                (!isGoogleAccount && !deletePassword) ||
+                (!isPasswordless && !deletePassword) ||
                 deleteLoading
               }
             >

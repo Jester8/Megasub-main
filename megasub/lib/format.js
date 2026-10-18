@@ -115,6 +115,13 @@ export function formatPlanTitle(name) {
 // it rejects the purchase with data.requires_phone_verification: true
 // instead of a plain failure, and `requiresPhoneVerification` lets callers
 // route to the phone-verification step instead of just showing an error.
+// "Network Error" only when no response came back from the server — a
+// response that carries an error (bad request, provider down) is a server
+// problem, not the customer's connection.
+export function requestErrorTitle(error) {
+  return error?.isNetworkError ? 'Network Error' : 'Something went wrong';
+}
+
 export function alertForPurchaseError(error) {
   const message = error?.message || '';
   const isWrongPin = /incorrect pin|invalid pin|pin mismatch|pins? (do(es)?n'?t|does not) match/i.test(message);

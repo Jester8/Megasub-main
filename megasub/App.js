@@ -13,9 +13,26 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
-import { fetchDashboard, setUnauthorizedHandler, resetUnauthorizedGuard, clearCachedVirtualAccounts, getSignupStep } from './lib/api';
+import {
+  fetchDashboard,
+  setUnauthorizedHandler,
+  resetUnauthorizedGuard,
+  clearCachedVirtualAccounts,
+  getSignupStep,
+  wasJustUnauthorized,
+  SESSION_ENDED_MESSAGE,
+} from './lib/api';
 import { queryClient, asyncStoragePersister, CACHE_BUSTER, CACHE_MAX_AGE } from './lib/queryClient';
 import { warmAppData } from './lib/warmup';
+import {
+  registerPushDevice,
+  forgetPushRegistration,
+  addPushTokenRefreshListener,
+  addNotificationTapListener,
+  getLaunchNotificationData,
+  clearLaunchNotification,
+  screenForNotification,
+} from './lib/pushNotifications';
 import NetworkErrorModal from './screens/home/components/NetworkErrorModal';
 import { ThemeProvider } from './contexts/ThemeContext';
 import OnboardingScreen from './screens/splash';
@@ -61,6 +78,20 @@ const SESSION_KEY = 'megasub_session_token';
 const ONBOARDING_KEY = 'megasub_onboarding_seen';
 const BIOMETRIC_KEY = 'megasub_biometric_enabled';
 
+// Screens shown before a signed-in user reaches Home. A notification tapped
+// while one of these is up waits until Home instead of skipping past login,
+// the biometric lock or unfinished signup.
+const PRE_HOME_SCREENS = new Set([null, 'onboarding', 'signup', 'login', 'unlock', 'verify', 'email-verify', 'reset']);
+
+// One message per ended login: right after a 401, the failing screen's own
+// catch would raise a second alert over the session one, so those are
+// dropped and only the session alert (shown through showAlert) gets through.
+const showAlert = Alert.alert.bind(Alert);
+Alert.alert = (...args) => {
+  if (wasJustUnauthorized()) return;
+  showAlert(...args);
+};
+
 export default function App() {
   // Every screen names its fontFamily explicitly, so the fonts must be
   // registered before the first screen renders. A load error falls back to the
@@ -102,6 +133,49 @@ export default function App() {
     setUnauthorizedHandler(handleUnauthorized);
   }, []);
 
+  // Push taps arrive through long-lived listeners, so they read the current
+  // user/navigate through refs instead of the values captured at mount.
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
+  const navigateRef = useRef(null);
+  const pendingNotificationRef = useRef(null);
+
+  function openNotification(data) {
+    const currentUserId = userRef.current?.id;
+    // A stale token on a shared phone could still deliver another account's
+    // alert — never open it for whoever is signed in now.
+    if (data?.user_id && currentUserId && String(data.user_id) !== String(currentUserId)) return;
+    if (!currentUserId || PRE_HOME_SCREENS.has(screenRef.current)) {
+      pendingNotificationRef.current = data;
+      return;
+    }
+    navigateRef.current?.(screenForNotification(data));
+  }
+
+  useEffect(() => {
+    const launchData = getLaunchNotificationData();
+    if (launchData) {
+      pendingNotificationRef.current = launchData;
+      clearLaunchNotification();
+    }
+    const tapSub = addNotificationTapListener(openNotification);
+    const tokenSub = addPushTokenRefreshListener(() => userRef.current?.id);
+    return () => {
+      tapSub.remove();
+      tokenSub.remove();
+    };
+  }, []);
+
+  // A tap that arrived before Home (cold start, biometric lock, login) is
+  // opened the moment the user actually gets there.
+  useEffect(() => {
+    if (screen === 'home' && pendingNotificationRef.current && user?.id) {
+      const data = pendingNotificationRef.current;
+      pendingNotificationRef.current = null;
+      openNotification(data);
+    }
+  }, [screen, user?.id]);
+
   // Root screens: the back button should exit/minimize the app from here,
   // never pop to something stale (e.g. back into a finished signup flow).
   const ROOT_SCREENS = new Set(['home', 'login', 'onboarding']);
@@ -133,7 +207,7 @@ export default function App() {
   // confusing "Unauthenticated" error. api.js's unauthorizedHandled guard is
   // what stops a burst of parallel 401s (e.g. Cable's Promise.all) from
   // calling this more than once and stacking duplicate alerts.
-  async function handleUnauthorized() {
+  async function handleUnauthorized(message) {
     const stillHasSession = await SecureStore.getItemAsync(SESSION_KEY);
     if (!stillHasSession) return;
 
@@ -143,9 +217,13 @@ export default function App() {
     // on every single re-login.
     await SecureStore.deleteItemAsync(SESSION_KEY).catch(() => {});
     clearCachedVirtualAccounts();
+    // The backend drops this device's push rows when it ends the session
+    // (spec §3); only the local "already registered" memo needs clearing so
+    // the next login registers again.
+    forgetPushRegistration();
     setUser(null);
     setScreen('login');
-    Alert.alert('Session Expired', 'Please log in again to continue.');
+    showAlert('Login ended', message || SESSION_ENDED_MESSAGE);
   }
 
   async function bootstrap() {
@@ -195,6 +273,7 @@ export default function App() {
         setScreen('home');
         refreshWallet();
         warmAppData(parsedUser?.id);
+        registerPushDevice(parsedUser?.id);
       } else if (onboardingSeen) {
         setScreen('login');
       } else {
@@ -329,8 +408,12 @@ function navigate(s, userData) {
   // network error the first time they open Wallet/Services/History.
   if (s === 'home') {
     warmAppData(actualUserData?.id || user?.id);
+    // Asks for notification permission the first time, then sends this
+    // install's push token to the backend (skipped if already sent this run).
+    registerPushDevice(actualUserData?.id || user?.id);
   }
 }
+navigateRef.current = navigate;
 
   let content = null;
   if (screen === 'onboarding') content = <OnboardingScreen navigate={navigate} />;
@@ -338,7 +421,7 @@ function navigate(s, userData) {
   if (screen === 'login')      content = <LoginScreen navigate={navigate} />;
   if (screen === 'unlock')     content = (
     <UnlockScreen
-      onUnlocked={() => { setScreen('home'); refreshWallet(); warmAppData(user?.id); }}
+      onUnlocked={() => { setScreen('home'); refreshWallet(); warmAppData(user?.id); registerPushDevice(user?.id); }}
       onUsePassword={handleUsePasswordInstead}
     />
   );

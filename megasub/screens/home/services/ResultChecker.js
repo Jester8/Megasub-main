@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   View,
   Text,
@@ -28,7 +29,9 @@ const EXAM_LOGOS = {
   WAEC: require('../../../assets/result-checker/waec.png'),
   NECO: require('../../../assets/result-checker/neco.png'),
 };
-import { formatNaira, alertForPurchaseError, sanitizePositiveInt } from '../../../lib/format';
+import { formatNaira, alertForPurchaseError, sanitizePositiveInt, requestErrorTitle } from '../../../lib/format';
+import { queryKeys } from '../../../lib/queries';
+import { extractResultCheckerPins, saveResultCheckerHistoryRecord } from '../../../lib/resultCheckerHistory';
 
 const FONTS = {
   regular: 'Montserrat_400Regular',
@@ -136,6 +139,7 @@ function PinCard({ pin, index, colors }) {
 export default function ResultChecker({ navigate, user }) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
+  const queryClient = useQueryClient();
 
   // Step Workflow Toggle: 'input' (Form screen), 'confirm' (Pin screen), 'success'
   const [step, setStep] = useState('input');
@@ -171,7 +175,7 @@ export default function ResultChecker({ navigate, user }) {
       if (list.length > 0) setSelectedProduct(list[0]);
     } catch (error) {
       if (error.isUnavailable) setUnavailableMessage(error.message);
-      else Alert.alert('Network Error', error.message || 'Could not load result checker options.');
+      else Alert.alert(requestErrorTitle(error), error.message || 'Could not load result checker options.');
     } finally {
       setLoadingProducts(false);
     }
@@ -221,11 +225,34 @@ export default function ResultChecker({ navigate, user }) {
       };
 
       const json = await buyResultChecker(payload);
-      // Response is expected to carry one entry per unit purchased, e.g.
-      // { data: { pins: [{ pin, serial }, ...] } } — see the endpoint list
-      // handed to the backend for the exact contract.
-      const pins = json?.data?.pins || json?.data?.result_checkers || [];
+      // The buy response is the only place the issued PINs ever appear —
+      // neither history endpoint returns them — so they're saved on the
+      // device right here for ReceiptModal to show later.
+      const pins = extractResultCheckerPins(json);
       setPurchasedPins(pins);
+
+      if (pins.length > 0 && user?.id) {
+        const data = json?.data && typeof json.data === 'object' && !Array.isArray(json.data) ? json.data : {};
+        const txn = data.transaction && typeof data.transaction === 'object' ? data.transaction : {};
+        const historyRecord = {
+          id: txn.id ?? data.transaction_id ?? data.id ?? `result-checker-local-${Date.now()}`,
+          ...(data.transaction_id ? { transaction_id: data.transaction_id } : {}),
+          ...((txn.reference || data.reference) ? { reference: txn.reference || data.reference } : {}),
+          exam_type: payload.exam_type,
+          quantity,
+          created_at: txn.created_at || data.created_at || new Date().toISOString(),
+          pins,
+        };
+        try {
+          const saved = await saveResultCheckerHistoryRecord(user.id, historyRecord);
+          queryClient.setQueryData(queryKeys.savedResultCheckerHistory(user.id), saved);
+        } catch {
+          // Still shown on the success screen below if disk storage fails.
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: queryKeys.resultCheckerTransactions(user?.id) });
+      queryClient.invalidateQueries({ queryKey: ['transactions', user?.id] });
       setStep('success');
     } catch (error) {
       // An unavailable response carries demo PINs — never surfaced as real

@@ -35,6 +35,7 @@ import {
   formatDate,
   toDateParam,
 } from '../../lib/transactionMeta';
+import { requestErrorTitle } from '../../lib/format';
 
 const FONTS = {
   regular: 'Montserrat_400Regular',
@@ -226,7 +227,7 @@ export default function TransactionHistory({ navigate, user }) {
           return [...prev, ...incoming.filter((t) => !ids.has(t.id))];
         });
       } catch (error) {
-        Alert.alert('Network Error', error.message || 'Could not load transactions for that range.');
+        Alert.alert(requestErrorTitle(error), error.message || 'Could not load transactions for that range.');
       } finally {
         setCustomLoading(false);
       }

@@ -24,7 +24,9 @@ import {
   getAccountSetupStatus,
   saveAccountSetupStatus,
 } from '../lib/api';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { signInWithGoogle, isGoogleSignInCancelled } from '../lib/googleAuth';
+import { signInWithApple, isAppleSignInCancelled, isAppleSignInAvailable } from '../lib/appleAuth';
 
 // Synchronized production API endpoint URL mapping
 const BASE_URL = 'https://mega-sub.com/api/v1/external';
@@ -156,6 +158,12 @@ export default function LoginScreen({ navigate }) {
   const [bioBusy, setBioBusy] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
+  const [appleAvailable, setAppleAvailable] = useState(false);
+
+  useEffect(() => {
+    isAppleSignInAvailable().then(setAppleAvailable);
+  }, []);
 
   // Shown regardless of whether a session currently exists — the device
   // capability (hardware + enrolled face/fingerprint) is the only thing
@@ -408,6 +416,24 @@ export default function LoginScreen({ navigate }) {
     }
   }
 
+  // Same routing as handleGoogle: only a brand-new account still needs the
+  // one-time phone/PIN setup; every returning account goes straight to Home.
+  async function handleApple() {
+    if (appleLoading || googleLoading || loading) return;
+    setAppleLoading(true);
+    try {
+      const { userData, requiresPhoneVerification, isNewUser } = await signInWithApple({
+        deviceName: 'iOS Device',
+      });
+      navigate && navigate(isNewUser && requiresPhoneVerification ? 'verify' : 'home', userData);
+    } catch (err) {
+      if (isAppleSignInCancelled(err)) return;
+      Alert.alert('Apple Sign-In Failed', err.message || 'Please try again.');
+    } finally {
+      setAppleLoading(false);
+    }
+  }
+
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
@@ -437,12 +463,11 @@ export default function LoginScreen({ navigate }) {
             Log in to continue where you left off
           </Text>
 
-          {/* Continue with Google — temporarily disabled, see login.jsx handleGoogle().
           <TouchableOpacity
             style={styles.googleBtn}
             onPress={handleGoogle}
             activeOpacity={0.8}
-            disabled={googleLoading || loading}
+            disabled={googleLoading || appleLoading || loading}
           >
             {googleLoading ? (
               <ActivityIndicator color={COLORS.primary} size="small" />
@@ -459,7 +484,24 @@ export default function LoginScreen({ navigate }) {
               </>
             )}
           </TouchableOpacity>
-          */}
+
+          {appleAvailable && (
+            <View style={styles.appleBtnWrap}>
+              {appleLoading ? (
+                <View style={[styles.appleBtn, styles.appleBtnBusy]}>
+                  <ActivityIndicator color={COLORS.white} size="small" />
+                </View>
+              ) : (
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                  cornerRadius={12}
+                  style={styles.appleBtn}
+                  onPress={handleApple}
+                />
+              )}
+            </View>
+          )}
 
           <FormInput
             label="Email, Username, or Phone"
@@ -601,6 +643,20 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     marginBottom: 24,
     gap: 10,
+  },
+  appleBtnWrap: {
+    marginTop: -12,
+    marginBottom: 24,
+  },
+  appleBtn: {
+    width: '100%',
+    height: 50,
+  },
+  appleBtnBusy: {
+    backgroundColor: '#000000',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   googleIconWrap: {
     width: 22,

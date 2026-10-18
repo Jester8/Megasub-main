@@ -33,6 +33,16 @@ export function resetUnauthorizedGuard() {
   unauthorizedHandled = false;
 }
 
+// The screen whose request got the 401 still runs its own catch and would
+// raise a second alert ("Network Error", "Transaction Failed") on top of the
+// one session message. App.js drops alerts raised within this window.
+const UNAUTHORIZED_ALERT_WINDOW_MS = 4000;
+let lastUnauthorizedAt = 0;
+export function wasJustUnauthorized() {
+  return Date.now() - lastUnauthorizedAt < UNAUTHORIZED_ALERT_WINDOW_MS;
+}
+export const SESSION_ENDED_MESSAGE = 'Your login is no longer active. Please log in again.';
+
 // fetch_naira_virtual_accounts needs the PIN on every call (that's what
 // makes it the one reliable PIN-verification proxy — see TopUp.js), so
 // there's no way to re-fetch without asking again. Caching the *result*
@@ -167,16 +177,24 @@ async function request(path, { method = 'GET', body, params } = {}) {
   }
 
   const json = await response.json().catch(() => ({}));
+  // TEMP-DEBUG-RC: remove after mapping result checker / schedule shapes
+  if (__DEV__ && /result_checker|scheduled_purchases|fetch_transactions|referrals|card_kyc|virtual_card|card/.test(path)) {
+    fetch('http://127.0.0.1:9787', { method: 'POST', body: JSON.stringify({ method, path, params, json }) }).catch(() => {});
+  }
 
   if (!response.ok || json.status === false) {
     console.log(`❌ API error on ${path}`, JSON.stringify({ httpStatus: response.status, sent: redactBody(body), received: json }));
 
+    // Mega-sub allows one active login, so a 401 means this token was
+    // replaced (or is missing), not that it timed out.
     if (response.status === 401) {
+      lastUnauthorizedAt = Date.now();
+      const message = json?.message || SESSION_ENDED_MESSAGE;
       if (!unauthorizedHandled) {
         unauthorizedHandled = true;
-        onUnauthorized?.();
+        onUnauthorized?.(message);
       }
-      const error = new Error('Your session has expired. Please log in again.');
+      const error = new Error(message);
       error.payload = json;
       error.isUnauthorized = true;
       throw error;
@@ -197,6 +215,17 @@ async function request(path, { method = 'GET', body, params } = {}) {
       error.payload = json;
       error.isRouteMissing = true;
       error.isUnavailable = true;
+      throw error;
+    }
+
+    // A reply that names a next step (card creation's next_action:
+    // "submit_card_kyc") is the server asking for that step, not a product
+    // that's unavailable — it also carries available: false, so it is
+    // flagged first and the caller routes to that step.
+    if (json?.data?.next_action) {
+      const error = new Error(json.message || 'Please complete the next step to continue.');
+      error.payload = json;
+      error.nextAction = json.data.next_action;
       throw error;
     }
 
@@ -474,25 +503,51 @@ export const fetchDashboard = (userId) =>
 // returning accounts from this one call — tnc is only required to create a
 // new account, but the docs say it's simply "not required" for an existing
 // one, not that it must be omitted, so it's sent unconditionally.
-export async function googleAuth({ idToken, deviceName, referralCode, tnc = true }) {
-  const response = await fetch(`${BASE_URL}/google`, {
+export function googleAuth({ idToken, deviceName, referralCode, tnc = true }) {
+  return socialAuthRequest('google', 'Google', {
+    id_token: idToken,
+    device_name: deviceName,
+    ...(referralCode ? { referral_code: referralCode } : {}),
+    tnc,
+  });
+}
+
+// ── Sign in with Apple (iOS only) ───────────────────────────────────
+// Same unauthenticated, outside-request() reasoning as googleAuth above, and
+// the backend answers with the same response shape and error codes (see
+// docs/Megasub_Backend_Requirements_Push_and_Social_Login.pdf §10). Apple
+// only hands over the user's name/email on the very first authorization,
+// so they're sent whenever present and the backend keeps them from then on.
+// nonce is the raw value — Apple was given its SHA-256, which is what ends
+// up in the token's nonce claim for the backend to compare against.
+export function appleAuth({ identityToken, authorizationCode, nonce, firstName, lastName, email, deviceName, referralCode, tnc = true }) {
+  return socialAuthRequest('apple', 'Apple', {
+    identity_token: identityToken,
+    authorization_code: authorizationCode,
+    nonce,
+    ...(firstName ? { first_name: firstName } : {}),
+    ...(lastName ? { last_name: lastName } : {}),
+    ...(email ? { email } : {}),
+    device_name: deviceName,
+    ...(referralCode ? { referral_code: referralCode } : {}),
+    tnc,
+  });
+}
+
+async function socialAuthRequest(path, providerLabel, payload) {
+  const response = await fetch(`${BASE_URL}/${path}`, {
     method: 'POST',
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      id_token: idToken,
-      device_name: deviceName,
-      ...(referralCode ? { referral_code: referralCode } : {}),
-      tnc,
-    }),
+    body: JSON.stringify(payload),
   });
 
   const json = await response.json().catch(() => ({}));
 
   if (!response.ok || json.status === false) {
-    const error = new Error(googleAuthErrorMessage(json, response.status));
+    const error = new Error(socialAuthErrorMessage(json, response.status, providerLabel));
     error.payload = json;
     error.httpStatus = json.code || response.status;
     throw error;
@@ -505,7 +560,7 @@ export async function googleAuth({ idToken, deviceName, referralCode, tnc = true
 // can act on. The API's own `message` is fine for most cases (e.g. "Invalid
 // or expired Google token."), but 403/409/503 read better with a more
 // specific, actionable line than whatever the backend happens to send.
-function googleAuthErrorMessage(json, httpStatus) {
+function socialAuthErrorMessage(json, httpStatus, providerLabel) {
   const code = json.code || httpStatus;
   switch (code) {
     case 403:
@@ -513,13 +568,25 @@ function googleAuthErrorMessage(json, httpStatus) {
     case 409:
       return 'This email is already linked to a different account. Please contact support.';
     case 422:
-      return json.message || 'Google did not provide the information required to continue.';
+      return json.message || `${providerLabel} did not provide the information required to continue.`;
     case 503:
-      return 'Google sign-in is not available right now. Please try again later or use email instead.';
+      return `${providerLabel} sign-in is not available right now. Please try again later or use email instead.`;
     default:
-      return json.message || 'Could not sign in with Google. Please try again.';
+      return json.message || `Could not sign in with ${providerLabel}. Please try again.`;
   }
 }
+
+// ── Push notification devices ───────────────────────────────────────
+// lib/pushNotifications.js registers this install's Expo push token after
+// every login and app start (an upsert server-side), and unregisters it on
+// logout so a signed-out phone stops receiving that account's alerts.
+export const registerDevice = (device) => request('register_device', { method: 'POST', body: device });
+
+export const unregisterDevice = ({ userId, deviceId, pushToken }) =>
+  request('unregister_device', {
+    method: 'POST',
+    body: { user_id: userId, device_id: deviceId, ...(pushToken ? { push_token: pushToken } : {}) },
+  });
 
 // ── Account Security ─────────────────────────────────────────────────
 // Same call verify.jsx uses at signup to set the PIN the first time — there

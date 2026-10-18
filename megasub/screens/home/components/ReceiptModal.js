@@ -5,8 +5,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useReceiptShare from '../../../lib/useReceiptShare';
 import Receipt from './Receipt';
 import ShareButtons from './ShareButtons';
-import { CATEGORY_STYLE, DEFAULT_STYLE, STATUS_LABELS, formatDate } from '../../../lib/transactionMeta';
+import { CATEGORY_STYLE, DEFAULT_STYLE, isResultCheckerTransaction, STATUS_LABELS, formatDate } from '../../../lib/transactionMeta';
 import { detectNetworkFromPhone } from '../../../lib/networkDetect';
+import { useResultCheckerTransactionsQuery, useSavedResultCheckerHistoryQuery } from '../../../lib/queries';
+import {
+  extractResultCheckerPins,
+  findMatchingResultCheckerRecord,
+  resultCheckerExamType,
+} from '../../../lib/resultCheckerHistory';
 
 // Same logos Airtime/Data/Bulk already show on their own confirm/success
 // screens — duplicated here rather than shared since each of those files
@@ -35,7 +41,39 @@ const CATEGORY_LABEL = {
   data: 'Data',
   utility_bills: 'Electricity',
   cable_subscription: 'Cable TV',
+  result_checker: 'Result Checker',
 };
+
+// Result checker purchases: fetch_transactions has neither the PINs nor the
+// RC reference/quantity. fetch_result_checker_transactions returns them
+// (data[].pins, matched by transaction_id); PINs saved on this device at
+// purchase time cover a history response that doesn't carry them.
+function getResultCheckerRows(transaction, serverRecord, savedRecord, statusLabel) {
+  const serverPins = extractResultCheckerPins({ pins: serverRecord?.pins });
+  const pins = serverPins.length > 0 ? serverPins : extractResultCheckerPins({ pins: savedRecord?.pins });
+  const exam = resultCheckerExamType(transaction) || resultCheckerExamType(serverRecord);
+  const quantity = serverRecord?.quantity ?? savedRecord?.quantity;
+  const reference = serverRecord?.reference || transaction.txn_reference || savedRecord?.reference;
+
+  return [
+    { label: 'Type', value: 'Result Checker' },
+    ...(exam ? [{ label: 'Exam', value: exam }] : []),
+    ...pins.flatMap((entry, index) => {
+      const suffix = pins.length > 1 ? ` ${index + 1}` : '';
+      return [
+        ...(entry.pin ? [{ label: `PIN${suffix}`, value: entry.pin, multiline: true }] : []),
+        ...(entry.serial ? [{ label: `Serial${suffix}`, value: entry.serial, multiline: true }] : []),
+      ];
+    }),
+    ...(pins.length === 0 && String(transaction.status) === '1'
+      ? [{ label: 'PIN', value: 'Not available yet', multiline: true }]
+      : []),
+    ...(quantity ? [{ label: 'Quantity', value: String(quantity) }] : []),
+    { label: 'Status', value: statusLabel },
+    ...(reference ? [{ label: 'Reference', value: String(reference), multiline: true }] : []),
+    { label: 'Date', value: formatDate(transaction.created_at) },
+  ];
+}
 
 // Full-screen receipt for a past transaction, tapped open from
 // TransactionHistory/Recent — same visual receipt and share actions as a
@@ -43,6 +81,10 @@ const CATEGORY_LABEL = {
 export default function ReceiptModal({ visible, transaction, onClose, colors }) {
   const insets = useSafeAreaInsets();
   const { receiptRef, sharing, handleShareImage } = useReceiptShare();
+  const isResultChecker = !!transaction && isResultCheckerTransaction(transaction);
+  const userId = transaction?.user_id;
+  const { data: serverRecords } = useResultCheckerTransactionsQuery(userId, { enabled: visible && isResultChecker });
+  const { data: savedRecords } = useSavedResultCheckerHistoryQuery(userId, { enabled: visible && isResultChecker });
 
   if (!transaction) return null;
 
@@ -56,7 +98,7 @@ export default function ReceiptModal({ visible, transaction, onClose, colors }) 
   const charged = Number(transaction.discounted_amount || transaction.amount || 0);
   const amount = faceValue || charged;
   const bonus = faceValue > charged ? faceValue - charged : 0;
-  const category = CATEGORY_LABEL[transaction.transaction_category] || 'Transaction';
+  const category = isResultChecker ? 'Result Checker' : CATEGORY_LABEL[transaction.transaction_category] || 'Transaction';
   const recipient = transaction.phone_number || transaction.smart_card_number || transaction.metre_number;
   // fetch_transactions has no dedicated network field — product_plan_name
   // (e.g. "MTN 500MB 3 MONTH") carries it as free text, but the recipient
@@ -65,7 +107,7 @@ export default function ReceiptModal({ visible, transaction, onClose, colors }) 
   const isAirtimeOrData = transaction.transaction_category === 'airtime' || transaction.transaction_category === 'data';
   const network = isAirtimeOrData ? detectNetworkFromPhone(transaction.phone_number) : null;
 
-  const rows = [
+  const genericRows = [
     { label: 'Type', value: category },
     ...(recipient ? [{ label: 'Recipient', value: recipient }] : []),
     ...(network ? [{ label: 'Network', value: network, logo: NETWORK_LOGOS[network] }] : []),
@@ -83,6 +125,14 @@ export default function ReceiptModal({ visible, transaction, onClose, colors }) 
     ...(transaction.txn_reference ? [{ label: 'Reference', value: transaction.txn_reference }] : []),
     { label: 'Date', value: formatDate(transaction.created_at) },
   ];
+  const rows = isResultChecker
+    ? getResultCheckerRows(
+        transaction,
+        findMatchingResultCheckerRecord(serverRecords, transaction),
+        findMatchingResultCheckerRecord(savedRecords, transaction),
+        statusLabel
+      )
+    : genericRows;
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>

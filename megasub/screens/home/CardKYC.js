@@ -20,6 +20,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import UnavailableNotice from './components/UnavailableNotice';
 
 import LogoLoader from './components/LogoLoader';
+import { requestErrorTitle } from '../../lib/format';
 const FONTS = {
   regular: 'Montserrat_400Regular',
   medium: 'Montserrat_500Medium',
@@ -120,7 +121,7 @@ export default function CardKYC({ navigate, user }) {
       // Provider not live yet: the form would just fail on submit, so it is
       // hidden behind a "coming soon" notice instead of offered.
       if (error.isUnavailable) setUnavailableMessage(error.message);
-      else Alert.alert('Network Error', error.message || 'Could not load your verification status.');
+      else Alert.alert(requestErrorTitle(error), error.message || 'Could not load your verification status.');
     } finally {
       setLoadingStatus(false);
     }

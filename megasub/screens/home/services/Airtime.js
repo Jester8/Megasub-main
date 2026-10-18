@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   Alert,
   StatusBar,
+  Pressable,
+  Keyboard,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,7 +29,7 @@ import useSchedulePurchase, { ScheduleLink } from '../components/useSchedulePurc
 import PurchaseSuccessModal from '../components/PurchaseSuccessModal';
 import CouponCheck from '../components/CouponCheck';
 import { detectNetworkFromPhone, findNetworkByLabel } from '../../../lib/networkDetect';
-import { formatNaira, alertForPurchaseError, stripNetworkPrefix, sanitizePositiveInt } from '../../../lib/format';
+import { formatNaira, alertForPurchaseError, stripNetworkPrefix, sanitizePositiveInt, requestErrorTitle } from '../../../lib/format';
 
 const FONTS = {
   regular: 'Montserrat_400Regular',
@@ -187,7 +189,7 @@ export default function Airtime({ navigate, user }) {
       setCategories(list);
       if (list.length > 0) setSelectedCategory(list[0]);
     } catch (error) {
-      Alert.alert('Network Error', error.message || 'Could not load recharge types.');
+      Alert.alert(requestErrorTitle(error), error.message || 'Could not load recharge types.');
     } finally {
       setLoadingCategories(false);
     }
@@ -205,7 +207,7 @@ export default function Airtime({ navigate, user }) {
       setPlans(list);
       if (list.length > 0) setSelectedPlan(list[0]);
     } catch (error) {
-      Alert.alert('Network Error', error.message || 'Could not load airtime plans.');
+      Alert.alert(requestErrorTitle(error), error.message || 'Could not load airtime plans.');
     } finally {
       setLoadingPlans(false);
     }
@@ -297,7 +299,15 @@ export default function Airtime({ navigate, user }) {
   const canContinue = !!(selectedNetwork && selectedCategory && selectedPlan && isValidPhone(phone) && Number(amount) > 0);
 
   return (
-    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+    // iOS number pads have no return/Done key, so the PIN keypad on the
+    // confirm step used to stay up over the footer with no way to close it —
+    // hiding Pay and the Schedule option. Any tap that isn't on a button or
+    // field (taps bubble up here unhandled) now closes the keyboard.
+    <Pressable
+      style={[styles.screen, { backgroundColor: colors.background }]}
+      onPress={Keyboard.dismiss}
+      accessible={false}
+    >
       <StatusBar barStyle={colors.statusBarStyle} translucent backgroundColor="transparent" />
       {/* Dynamic Navigation Header depending on active layout workflow block */}
       {step !== 'success' && (
@@ -350,7 +360,7 @@ export default function Airtime({ navigate, user }) {
         })()
       ) : step === 'input' ? (
         /* ================= STEP 1: INPUT DATA SELECTION VIEW ================= */
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag">
           <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Select Network</Text>
           {loadingNetworks ? (
             <ActivityIndicator color={BRAND} style={{ marginTop: 10 }} />
@@ -569,7 +579,7 @@ export default function Airtime({ navigate, user }) {
         message="Airtime Purchase Successful"
         onClose={() => setSuccessModalVisible(false)}
       />
-    </View>
+    </Pressable>
   );
 }
 

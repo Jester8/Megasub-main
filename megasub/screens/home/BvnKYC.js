@@ -18,7 +18,7 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchKycStatus, verifyBvn } from '../../lib/api';
 import { requireNetworkOrShowError } from '../../lib/network';
-import { formatNaira, formatUsd, toLocalNigerianPhone, extractBvnProfile } from '../../lib/format';
+import { formatNaira, formatUsd, toLocalNigerianPhone, extractBvnProfile, requestErrorTitle } from '../../lib/format';
 import { useTheme } from '../../contexts/ThemeContext';
 import UnavailableNotice from './components/UnavailableNotice';
 
@@ -108,7 +108,7 @@ export default function BvnKYC({ navigate, user }) {
       setKyc(json?.data || null);
     } catch (error) {
       if (error.isUnavailable) setUnavailableMessage(error.message);
-      else Alert.alert('Network Error', error.message || 'Could not load your verification status.');
+      else Alert.alert(requestErrorTitle(error), error.message || 'Could not load your verification status.');
     } finally {
       setLoading(false);
     }

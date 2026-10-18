@@ -23,7 +23,7 @@ import CategoryTabs from '../components/CategoryTabs';
 import OptionList from '../components/OptionList';
 import SuccessView from '../components/SuccessView';
 import WrongPinModal from '../components/WrongPinModal';
-import { formatNaira, alertForPurchaseError, sanitizePositiveInt } from '../../../lib/format';
+import { formatNaira, alertForPurchaseError, sanitizePositiveInt, requestErrorTitle } from '../../../lib/format';
 
 const FONTS = {
   regular: 'Montserrat_400Regular',
@@ -167,7 +167,7 @@ export default function Electricity({ navigate, user }) {
 
   useEffect(() => {
     if (catalogError) {
-      Alert.alert('Network Error', catalogErrorObj?.message || 'Could not load electricity providers.');
+      Alert.alert(requestErrorTitle(catalogErrorObj), catalogErrorObj?.message || 'Could not load electricity providers.');
     }
   }, [catalogError]);
 

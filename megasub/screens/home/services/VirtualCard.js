@@ -20,7 +20,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   fetchVirtualCardProducts,
-  fetchKycStatus,
+  fetchCardKycStatus,
   fetchCards,
   fetchCardDetails,
   createCard,
@@ -39,6 +39,7 @@ import {
   alertForPurchaseError,
   cardFundingCharge,
   cardTotalUsd,
+  requestErrorTitle,
 } from '../../../lib/format';
 
 const FONTS = {
@@ -515,10 +516,10 @@ export default function VirtualCard({ navigate, user }) {
   const [cards, setCards] = useState([]);
   const [loadingCards, setLoadingCards] = useState(true);
   const [products, setProducts] = useState([]);
-  // BVN verification decides whether a card can be created: true = verified,
+  // Card KYC decides whether a card can be created: true = verified,
   // false = not verified yet, null = still unknown (loading, or the status
   // could not be read). Creating is only allowed once it is true.
-  const [bvnVerified, setBvnVerified] = useState(null);
+  const [cardKycVerified, setCardKycVerified] = useState(null);
   // Set when the provider isn't live (products not configured, or a call
   // answered available: false). Demo values in those responses are never
   // shown as real cards.
@@ -569,15 +570,18 @@ export default function VirtualCard({ navigate, user }) {
         return;
       }
 
-      const [kycRes, cardsRes] = await Promise.allSettled([fetchKycStatus(), fetchCards(user?.id)]);
+      // General BVN verification doesn't complete the card provider's KYC,
+      // so creation is gated on the Card KYC status itself.
+      const [kycRes, cardsRes] = await Promise.allSettled([fetchCardKycStatus(user?.id), fetchCards(user?.id)]);
       let unavailable = null;
       let failure = null;
 
       if (kycRes.status === 'fulfilled') {
         const kyc = kycRes.value?.data || {};
-        setBvnVerified(kyc.verified === true || kyc.status === 'verified');
+        setCardKycVerified(kyc.verified === true || String(kyc.status).toLowerCase() === 'verified');
       } else {
-        setBvnVerified(null);
+        // A status call that answers "submit_card_kyc" means not verified yet.
+        setCardKycVerified(kycRes.reason?.nextAction === 'submit_card_kyc' ? false : null);
       }
 
       if (cardsRes.status === 'fulfilled') {
@@ -587,18 +591,18 @@ export default function VirtualCard({ navigate, user }) {
       else failure = cardsRes.reason;
 
       setUnavailableMessage(unavailable);
-      if (failure) Alert.alert('Network Error', failure.message || 'Could not load your cards.');
+      if (failure) Alert.alert(requestErrorTitle(failure), failure.message || 'Could not load your cards.');
     } catch (error) {
       if (error.isUnavailable) setUnavailableMessage(error.message);
-      else Alert.alert('Network Error', error.message || 'Could not load your cards.');
+      else Alert.alert(requestErrorTitle(error), error.message || 'Could not load your cards.');
     } finally {
       setLoadingCards(false);
     }
   };
 
-  // A card can only be created once the user's BVN is verified. The screen
-  // also disables every create button until then; this guards the handlers.
-  const canCreate = bvnVerified === true;
+  // A card can only be created once Card KYC is verified. The screen also
+  // disables every create button until then; this guards the handlers.
+  const canCreate = cardKycVerified === true;
   const startCreate = () => {
     if (unavailableMessage || !canCreate) return;
     setStep('create-type');
@@ -622,6 +626,15 @@ export default function VirtualCard({ navigate, user }) {
       setNewCard(json?.data || null);
       setStep('create-success');
     } catch (error) {
+      if (error.nextAction === 'submit_card_kyc') {
+        setPin('');
+        setStep('list');
+        Alert.alert('Card Verification Needed', error.message, [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Verify Now', onPress: () => navigate && navigate('card-kyc') },
+        ]);
+        return;
+      }
       if (error.isUnavailable) {
         Alert.alert('Unavailable', error.message);
         setStep('list');
@@ -686,16 +699,16 @@ export default function VirtualCard({ navigate, user }) {
             <TouchableOpacity
               style={[styles.kycBanner, { backgroundColor: colors.card, borderColor: colors.border }]}
               activeOpacity={0.8}
-              onPress={() => navigate && navigate('kyc')}
+              onPress={() => navigate && navigate('card-kyc')}
             >
               <Feather name="shield" size={18} color={BRAND} />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.kycBannerTitle, { color: colors.text }]}>
-                  {bvnVerified === false ? 'Verify your BVN to create a card' : "We couldn't check your verification"}
+                  {cardKycVerified === false ? 'Complete card verification to create a card' : "We couldn't check your verification"}
                 </Text>
                 <Text style={[styles.kycBannerSub, { color: colors.textFaint }]}>
-                  {bvnVerified === false
-                    ? 'Card creation unlocks as soon as your BVN is verified. Tap to verify.'
+                  {cardKycVerified === false
+                    ? 'Card creation unlocks as soon as your card verification is approved. Tap to continue.'
                     : 'Tap to open verification and check your status.'}
                 </Text>
               </View>

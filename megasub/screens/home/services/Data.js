@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   Alert,
   StatusBar,
+  Pressable,
+  Keyboard,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,7 +27,7 @@ import WrongPinModal from '../components/WrongPinModal';
 import ScheduleSheet from '../components/ScheduleSheet';
 import useSchedulePurchase, { ScheduleLink } from '../components/useSchedulePurchase';
 import { detectNetworkFromPhone, findNetworkByLabel } from '../../../lib/networkDetect';
-import { formatNaira, alertForPurchaseError, stripNetworkPrefix, formatPlanTitle } from '../../../lib/format';
+import { formatNaira, alertForPurchaseError, stripNetworkPrefix, formatPlanTitle, requestErrorTitle } from '../../../lib/format';
 import CouponCheck from '../components/CouponCheck';
 
 const FONTS = {
@@ -164,7 +166,7 @@ export default function Data({ navigate, user }) {
       // users pick a data type that isn't actually usable.
       setCategories((json.data || []).filter((c) => !/\bCG\b/i.test(c.product_plan_category_name)));
     } catch (error) {
-      Alert.alert('Network Error', error.message || 'Could not load data categories.');
+      Alert.alert(requestErrorTitle(error), error.message || 'Could not load data categories.');
     } finally {
       setLoadingCategories(false);
     }
@@ -177,7 +179,7 @@ export default function Data({ navigate, user }) {
       const json = await fetchProductPlans({ userId: user?.id, productSlug: 'data', networkId, planCategoryId });
       setPlans(json.data || []);
     } catch (error) {
-      Alert.alert('Network Error', error.message || 'Could not load data plans.');
+      Alert.alert(requestErrorTitle(error), error.message || 'Could not load data plans.');
     } finally {
       setLoadingPlans(false);
     }
@@ -215,7 +217,7 @@ export default function Data({ navigate, user }) {
         product_plan_category_id: selectedCategory.id,
         product_plan_id: selectedPlan.product_plan_id,
         wallet_category: 'main_wallet',
-        validatephonenetwork: 0,
+        validatephonenetwork: 1,
       };
     },
   });
@@ -260,7 +262,15 @@ export default function Data({ navigate, user }) {
   };
 
   return (
-    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+    // iOS number pads have no return/Done key, so the PIN keypad on the
+    // confirm step used to stay up over the footer with no way to close it —
+    // hiding Pay and the Schedule option. Any tap that isn't on a button or
+    // field (taps bubble up here unhandled) now closes the keyboard.
+    <Pressable
+      style={[styles.screen, { backgroundColor: colors.background }]}
+      onPress={Keyboard.dismiss}
+      accessible={false}
+    >
       <StatusBar barStyle={colors.statusBarStyle} translucent backgroundColor="transparent" />
       {step !== 'success' && (
         <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
@@ -295,7 +305,7 @@ export default function Data({ navigate, user }) {
           colors={colors}
         />
       ) : step === 'input' ? (
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag">
           <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Select Network</Text>
           {loadingNetworks ? (
             <ActivityIndicator color={BRAND} style={{ marginTop: 10 }} />
@@ -512,7 +522,7 @@ export default function Data({ navigate, user }) {
           setPinKey((k) => k + 1);
         }}
       />
-    </View>
+    </Pressable>
   );
 }
 

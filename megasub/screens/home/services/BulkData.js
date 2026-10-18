@@ -27,7 +27,7 @@ import CategoryTabs from '../components/CategoryTabs';
 import PlanGrid from '../components/PlanGrid';
 import ContactPicker from '../components/ContactPicker';
 import WrongPinModal from '../components/WrongPinModal';
-import { formatNaira, alertForPurchaseError, stripNetworkPrefix, formatPlanTitle } from '../../../lib/format';
+import { formatNaira, alertForPurchaseError, stripNetworkPrefix, formatPlanTitle, requestErrorTitle } from '../../../lib/format';
 
 const FONTS = {
   regular: 'Montserrat_400Regular',
@@ -168,7 +168,7 @@ export default function BulkData({ navigate, user }) {
       setCategories(list);
       if (list.length > 0) setSelectedCategory(list[0]);
     } catch (error) {
-      Alert.alert('Network Error', error.message || 'Could not load data categories.');
+      Alert.alert(requestErrorTitle(error), error.message || 'Could not load data categories.');
     } finally {
       setLoadingCategories(false);
     }
@@ -183,7 +183,7 @@ export default function BulkData({ navigate, user }) {
       setPlans(list);
       if (list.length > 0) setSelectedPlan(list[0]);
     } catch (error) {
-      Alert.alert('Network Error', error.message || 'Could not load data plans.');
+      Alert.alert(requestErrorTitle(error), error.message || 'Could not load data plans.');
     } finally {
       setLoadingPlans(false);
     }

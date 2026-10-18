@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import { useResponsive } from '../lib/responsive';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { signInWithGoogle, isGoogleSignInCancelled } from '../lib/googleAuth';
+import { signInWithApple, isAppleSignInCancelled, isAppleSignInAvailable } from '../lib/appleAuth';
 import { setSignupStep } from '../lib/api';
 import TermsModal from './home/components/TermsModal';
 
@@ -58,6 +60,7 @@ function FormInput({
   autoCapitalize,
   error,
   required,
+  maxLength,
 }) {
   const [focused, setFocused] = useState(false);
   const [shown, setShown] = useState(false);
@@ -84,6 +87,7 @@ function FormInput({
           secureTextEntry={secureTextEntry && !shown}
           keyboardType={keyboardType || 'default'}
           autoCapitalize={autoCapitalize || 'none'}
+          maxLength={maxLength}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
         />
@@ -153,6 +157,7 @@ export default function SignupScreen({ navigate }) {
   const { column } = useResponsive();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -161,12 +166,21 @@ export default function SignupScreen({ navigate }) {
   const [termsVisible, setTermsVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
+  const [appleAvailable, setAppleAvailable] = useState(false);
+
+  useEffect(() => {
+    isAppleSignInAvailable().then(setAppleAvailable);
+  }, []);
   const [errors, setErrors] = useState({});
 
   function validate() {
     const e = {};
     if (!firstName.trim()) e.firstName = 'First name is required';
     if (!lastName.trim()) e.lastName = 'Last name is required';
+    const phoneDigits = phoneNumber.replace(/\D/g, '');
+    if (!phoneNumber.trim()) e.phoneNumber = 'Phone number is required';
+    else if (phoneDigits.length < 10 || phoneDigits.length > 15) e.phoneNumber = 'Enter a valid phone number';
     if (!username.trim()) e.username = 'Username is required';
     if (!email.trim()) e.email = 'Email is required';
     else if (!/\S+@\S+\.\S+/.test(email)) e.email = 'Enter a valid email';
@@ -184,6 +198,7 @@ export default function SignupScreen({ navigate }) {
       const requestBody = {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
+        phone_number: phoneNumber.trim(),
         username: username.trim(),
         email: email.trim().toLowerCase(),
         password,
@@ -196,8 +211,6 @@ export default function SignupScreen({ navigate }) {
       if (referral.trim()) {
         requestBody.referral_code = referral.trim();
       }
-
-      console.log('📤 Sending registration request:', requestBody);
 
       const res = await fetch(`${BASE_URL}/register`, {
         method: 'POST',
@@ -212,7 +225,6 @@ export default function SignupScreen({ navigate }) {
       // body) instead of JSON, which would otherwise throw here and get
       // reported as a connection problem the user can't act on.
       const json = await res.json().catch(() => ({}));
-      console.log('📥 Full API Response:', JSON.stringify(json, null, 2));
       console.log('📥 Response status code:', res.status);
       console.log('📥 Response status field:', json.status);
 
@@ -265,10 +277,12 @@ export default function SignupScreen({ navigate }) {
       // Extract token and user data
       const token = json.access?.token || json.data?.access?.token || json.data?.token;
       const userDataFromApi = json.data;
+      const phoneIsVerified =
+        Number(userDataFromApi?.phone_verification) === 1 ||
+        userDataFromApi?.phone_verified === true ||
+        userDataFromApi?.phone_verified === 1;
 
       console.log('🔑 Extracted token:', token ? '✅ Present' : '❌ Missing');
-      console.log('🆔 Extracted user ID:', userDataFromApi?.id || '❌ Missing');
-      console.log('👤 User data from API:', userDataFromApi);
 
       if (!token || !userDataFromApi) {
         console.error('❌ Missing token or user data in response:', json);
@@ -276,27 +290,23 @@ export default function SignupScreen({ navigate }) {
         return;
       }
 
-      // ✅ Create complete user data object with all fields
       const userData = {
+        ...userDataFromApi,
         id: userDataFromApi.id,
         first_name: userDataFromApi.first_name || firstName,
         last_name: userDataFromApi.last_name || lastName,
         username: userDataFromApi.username || username,
         email: userDataFromApi.email || email,
-        phone_number: '',
-        token: token,
+        // Keep an unverified signup number separate so VerifyScreen can
+        // prefill it without skipping the phone OTP step.
+        phone_number: phoneIsVerified ? (userDataFromApi.phone_number || phoneNumber.trim()) : '',
+        signup_phone_number: phoneNumber.trim(),
+        token,
         role_id: userDataFromApi.role_id || '',
         user_plan_id: userDataFromApi.user_plan_id || '',
         created_at: userDataFromApi.created_at || '',
         updated_at: userDataFromApi.updated_at || '',
-        // Preserve any other fields
-        ...userDataFromApi
       };
-
-      console.log('📦 Complete user data to save:', JSON.stringify(userData, null, 2));
-      console.log('👤 First name being passed:', userData.first_name);
-      console.log('👤 Last name being passed:', userData.last_name);
-      console.log('👤 Email being passed:', userData.email);
 
       // ✅ Save user data to SecureStore immediately
       await SecureStore.setItemAsync(SESSION_KEY, token);
@@ -357,6 +367,34 @@ export default function SignupScreen({ navigate }) {
     }
   }
 
+  // Same consent gate and routing as handleGoogle — Apple sign-in can
+  // create a brand-new account too.
+  async function handleApple() {
+    if (appleLoading || googleLoading || loading) return;
+    if (!agreed) {
+      setErrors((prev) => ({ ...prev, agreed: 'You must agree to the Terms and Conditions' }));
+      Alert.alert(
+        'Agree to Continue',
+        'Please check "I have read the Terms and Conditions" below before continuing with Apple.'
+      );
+      return;
+    }
+
+    setAppleLoading(true);
+    try {
+      const { userData, requiresPhoneVerification, isNewUser } = await signInWithApple({
+        deviceName: 'iOS Device',
+        referralCode: referral.trim(),
+      });
+      navigate && navigate(isNewUser && requiresPhoneVerification ? 'verify' : 'home', userData);
+    } catch (err) {
+      if (isAppleSignInCancelled(err)) return;
+      Alert.alert('Apple Sign-In Failed', err.message || 'Please try again.');
+    } finally {
+      setAppleLoading(false);
+    }
+  }
+
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
@@ -381,12 +419,11 @@ export default function SignupScreen({ navigate }) {
           <Text style={styles.heading}>Get started with Megasub</Text>
           <Text style={styles.subheading}>Enjoy seamless services on signing up</Text>
 
-          {/* Continue with Google — temporarily disabled, see signup.jsx handleGoogle().
           <TouchableOpacity
             style={styles.googleBtn}
             onPress={handleGoogle}
             activeOpacity={0.8}
-            disabled={googleLoading || loading}
+            disabled={googleLoading || appleLoading || loading}
           >
             {googleLoading ? (
               <ActivityIndicator color={COLORS.primary} size="small" />
@@ -403,7 +440,24 @@ export default function SignupScreen({ navigate }) {
               </>
             )}
           </TouchableOpacity>
-          */}
+
+          {appleAvailable && (
+            <View style={styles.appleBtnWrap}>
+              {appleLoading ? (
+                <View style={[styles.appleBtn, styles.appleBtnBusy]}>
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                </View>
+              ) : (
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                  cornerRadius={12}
+                  style={styles.appleBtn}
+                  onPress={handleApple}
+                />
+              )}
+            </View>
+          )}
         </View>
 
         <ScrollView
@@ -437,6 +491,17 @@ export default function SignupScreen({ navigate }) {
               />
             </View>
           </View>
+
+          <FormInput
+            label="Phone Number"
+            placeholder="e.g. 08012345678"
+            value={phoneNumber}
+            onChangeText={setPhoneNumber}
+            keyboardType="phone-pad"
+            error={errors.phoneNumber}
+            required
+            maxLength={16}
+          />
 
           <FormInput
             label="Username"
@@ -608,6 +673,20 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     marginBottom: 24,
     gap: 10,
+  },
+  appleBtnWrap: {
+    marginTop: -12,
+    marginBottom: 24,
+  },
+  appleBtn: {
+    width: '100%',
+    height: 50,
+  },
+  appleBtnBusy: {
+    backgroundColor: '#000000',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   googleIconWrap: {
     width: 22,
