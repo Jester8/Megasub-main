@@ -20,6 +20,7 @@ import { useResponsive } from '../lib/responsive';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { signInWithGoogle, isGoogleSignInCancelled } from '../lib/googleAuth';
 import { signInWithApple, isAppleSignInCancelled, isAppleSignInAvailable } from '../lib/appleAuth';
+import { SHOW_SOCIAL_LOGIN } from '../lib/featureFlags';
 import { setSignupStep } from '../lib/api';
 import TermsModal from './home/components/TermsModal';
 
@@ -419,44 +420,48 @@ export default function SignupScreen({ navigate }) {
           <Text style={styles.heading}>Get started with Megasub</Text>
           <Text style={styles.subheading}>Enjoy seamless services on signing up</Text>
 
-          <TouchableOpacity
-            style={styles.googleBtn}
-            onPress={handleGoogle}
-            activeOpacity={0.8}
-            disabled={googleLoading || appleLoading || loading}
-          >
-            {googleLoading ? (
-              <ActivityIndicator color={COLORS.primary} size="small" />
-            ) : (
-              <>
-                <View style={styles.googleIconWrap}>
-                  <Image
-                    source={require('../assets/google.png')}
-                    style={styles.googleIconImg}
-                    resizeMode="contain"
-                  />
-                </View>
-                <Text style={styles.googleText}>Continue with Google</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          {SHOW_SOCIAL_LOGIN && (
+            <>
+              <TouchableOpacity
+                style={styles.googleBtn}
+                onPress={handleGoogle}
+                activeOpacity={0.8}
+                disabled={googleLoading || appleLoading || loading}
+              >
+                {googleLoading ? (
+                  <ActivityIndicator color={COLORS.primary} size="small" />
+                ) : (
+                  <>
+                    <View style={styles.googleIconWrap}>
+                      <Image
+                        source={require('../assets/google.png')}
+                        style={styles.googleIconImg}
+                        resizeMode="contain"
+                      />
+                    </View>
+                    <Text style={styles.googleText}>Continue with Google</Text>
+                  </>
+                )}
+              </TouchableOpacity>
 
-          {appleAvailable && (
-            <View style={styles.appleBtnWrap}>
-              {appleLoading ? (
-                <View style={[styles.appleBtn, styles.appleBtnBusy]}>
-                  <ActivityIndicator color="#FFFFFF" size="small" />
+              {appleAvailable && (
+                <View style={styles.appleBtnWrap}>
+                  {appleLoading ? (
+                    <View style={[styles.appleBtn, styles.appleBtnBusy]}>
+                      <ActivityIndicator color="#FFFFFF" size="small" />
+                    </View>
+                  ) : (
+                    <AppleAuthentication.AppleAuthenticationButton
+                      buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                      buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                      cornerRadius={12}
+                      style={styles.appleBtn}
+                      onPress={handleApple}
+                    />
+                  )}
                 </View>
-              ) : (
-                <AppleAuthentication.AppleAuthenticationButton
-                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-                  cornerRadius={12}
-                  style={styles.appleBtn}
-                  onPress={handleApple}
-                />
               )}
-            </View>
+            </>
           )}
         </View>
 

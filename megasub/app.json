@@ -2,14 +2,14 @@
   "expo": {
     "name": "megasub",
     "slug": "megasub",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/app-icon-1024.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.megasub.megasub",
+      "bundleIdentifier": "com.anonymous.megasub",
       "usesAppleSignIn": true,
       "infoPlist": {
         "NSFaceIDUsageDescription": "Megasub uses Face ID to let you log in and unlock the app quickly and securely.",

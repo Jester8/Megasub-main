@@ -15,9 +15,9 @@ const GOOGLE_WEB_CLIENT_ID = '610379032738-gjnp8tokk3s6g160qa9l9ub3ltcdarl1.apps
 
 // iOS-type OAuth client — its reversed form is also registered as the URL
 // scheme in app.json so the OS can route the sign-in redirect back into the
-// app. Its bundle ID was edited in Google Cloud Console to com.megasub.megasub
-// (2026-10-18) to match app.json and the existing App Store Connect record,
-// keeping the same client ID.
+// app. It must be registered in Google Cloud Console against the iOS bundle
+// ID in app.json, com.anonymous.megasub (the app's original App Store ID — a
+// brief switch to com.megasub.megasub was reverted on 2026-10-19).
 const GOOGLE_IOS_CLIENT_ID = '610379032738-qgicd1bril1d6n43v78ldqmh8bfdacaq.apps.googleusercontent.com';
 
 // Android-type OAuth client also exists (610379032738-06kumfcnmfcnfn2a70ep1hhed082jafi.apps.googleusercontent.com)

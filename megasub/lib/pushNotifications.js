@@ -73,9 +73,24 @@ async function ensurePermission() {
 // Repeats within one app run for the same account/token are skipped; the
 // backend treats each call as an upsert anyway.
 let lastRegistration = null;
+// Home can be navigated to several times in quick succession, so concurrent
+// calls share one in-flight registration, and a failed attempt waits a
+// minute before the next try instead of hammering the API on every render.
+let inFlight = null;
+let lastFailureAt = 0;
+const RETRY_AFTER_FAILURE_MS = 60 * 1000;
 
-export async function registerPushDevice(userId) {
-  if (!userId) return;
+export function registerPushDevice(userId) {
+  if (!userId) return Promise.resolve();
+  if (inFlight) return inFlight;
+  if (Date.now() - lastFailureAt < RETRY_AFTER_FAILURE_MS) return Promise.resolve();
+  inFlight = doRegisterPushDevice(userId).finally(() => {
+    inFlight = null;
+  });
+  return inFlight;
+}
+
+async function doRegisterPushDevice(userId) {
   try {
     await ensureAndroidChannels();
     if (!(await ensurePermission())) return;
@@ -100,11 +115,13 @@ export async function registerPushDevice(userId) {
       locale: Intl.DateTimeFormat().resolvedOptions().locale,
     });
     lastRegistration = key;
+    lastFailureAt = 0;
     await SecureStore.setItemAsync(PUSH_TOKEN_KEY, pushToken);
   } catch (err) {
-    // Push is a nice-to-have on top of every flow — simulators have no push
-    // token, and until the backend ships /register_device the call 404s.
-    // Neither should ever surface as an error to the user.
+    // Push is a nice-to-have on top of every flow — simulators may have no
+    // push token, and a failed call is retried later. Neither should ever
+    // surface as an error to the user.
+    lastFailureAt = Date.now();
     console.log('⚠️ Push registration skipped:', err?.message);
   }
 }
@@ -134,13 +151,24 @@ export async function unregisterPushDevice(userId) {
 // backend already dropped this device; only the in-memory memo needs reset.
 export function forgetPushRegistration() {
   lastRegistration = null;
+  lastFailureAt = 0;
 }
 
 // APNs/FCM can rotate a token while the app is running; re-register so the
-// backend never keeps sending to the dead one.
+// backend never keeps sending to the dead one. This listener also fires every
+// time getExpoPushTokenAsync fetches the (unchanged) device token, so it must
+// only act on a token that actually differs — reacting to every event made
+// registration re-trigger itself in an endless loop.
+let lastDeviceToken = null;
+
 export function addPushTokenRefreshListener(getUserId) {
-  return Notifications.addPushTokenListener(() => {
+  return Notifications.addPushTokenListener(({ data }) => {
+    const token = typeof data === 'string' ? data : JSON.stringify(data);
+    const changed = lastDeviceToken !== null && lastDeviceToken !== token;
+    lastDeviceToken = token;
+    if (!changed) return;
     lastRegistration = null;
+    lastFailureAt = 0;
     registerPushDevice(getUserId());
   });
 }
