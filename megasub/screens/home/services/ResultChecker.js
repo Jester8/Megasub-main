@@ -536,7 +536,7 @@ const styles = StyleSheet.create({
   sectionLabel: { fontFamily: FONTS.semibold, fontSize: 13, color: '#6B7088', marginTop: 22, marginBottom: 10 },
   emptyText: { fontFamily: FONTS.medium, fontSize: 13, textAlign: 'center', marginTop: 20 },
 
-  productRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  productRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10 },
   productPill: {
     paddingVertical: 14, paddingHorizontal: 16,
     borderRadius: 14, backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: '#ECEDF6',

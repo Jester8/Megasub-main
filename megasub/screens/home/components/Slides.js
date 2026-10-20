@@ -13,9 +13,14 @@ const PADDING = 16;
 
 const SLIDES = SLIDE_SOURCES.map((source, index) => ({ id: String(index + 1), source }));
 
+// The banner artwork is designed for a phone-width card (~370 x 148). On a
+// full-width tablet a fixed height crops it top and bottom, so tablets keep
+// the same shape instead and let the height follow the width.
+const TABLET_ASPECT_RATIO = 370 / 148;
+
 export default function Slide() {
-  // A page must be exactly as wide as the column it sits in, or paging snaps
-  // to the wrong offsets — on a tablet that column is capped, not the screen.
+  // A page must be exactly as wide as the content it sits in, or paging snaps
+  // to the wrong offsets.
   const { isTablet, contentWidth } = useResponsive();
   const carouselWidth = contentWidth - PADDING * 2;
   const [activeIndex, setActiveIndex] = useState(0);
@@ -67,7 +72,11 @@ export default function Slide() {
           <View style={[styles.slideItem, { width: contentWidth }]}>
             <Image
               source={item.source}
-              style={[styles.image, { width: carouselWidth }, isTablet && styles.imageTablet]}
+              style={[
+                styles.image,
+                { width: carouselWidth },
+                isTablet && { height: Math.round(carouselWidth / TABLET_ASPECT_RATIO) },
+              ]}
               resizeMode="cover"
             />
           </View>
@@ -107,9 +116,6 @@ const styles = StyleSheet.create({
   image: {
     height: 148, // Matches WalletCard's minHeight so both cards read as the same size
     borderRadius: 20, // Matches WalletCard's borderRadius
-  },
-  imageTablet: {
-    height: 140, // Matches WalletCard's cardTablet minHeight
   },
   indicatorContainer: {
     flexDirection: 'row',

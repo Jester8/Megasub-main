@@ -542,7 +542,7 @@ const styles = StyleSheet.create({
   labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   countBadge: { fontFamily: FONTS.semibold, fontSize: 12.5 },
 
-  networkRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  networkRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10 },
   networkPill: {
     flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14,
     borderRadius: 14, backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: '#ECEDF6',

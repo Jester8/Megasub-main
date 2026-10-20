@@ -11,8 +11,16 @@ const FONTS = {
 // optional top meta line (e.g. validity), a bold title, an optional price,
 // and an optional bottom badge pill (e.g. category name).
 // plans: [{ id, meta, title, price, badge }]
+const COLUMNS = 3;
+const GAP = 10;
+
 export default function PlanGrid({ plans, selectedId, onSelect, colors }) {
   if (!plans || plans.length === 0) return null;
+  // Cards grow to share each row equally, so three always fill the width
+  // exactly on any screen (a percentage width plus a fixed gap only adds up
+  // on a phone and left a ragged right edge on a full-width tablet). Spacers
+  // pad an incomplete last row so its cards keep the same width as the rest.
+  const spacerCount = (COLUMNS - (plans.length % COLUMNS)) % COLUMNS;
   return (
     <View style={styles.grid}>
       {plans.map((p) => {
@@ -54,6 +62,9 @@ export default function PlanGrid({ plans, selectedId, onSelect, colors }) {
           </TouchableOpacity>
         );
       })}
+      {Array.from({ length: spacerCount }, (_, i) => (
+        <View key={`spacer-${i}`} style={[styles.card, styles.spacer]} />
+      ))}
     </View>
   );
 }
@@ -62,10 +73,11 @@ const styles = StyleSheet.create({
   // alignItems defaults to stretch, so every card in a row grows to match
   // the tallest one — long titles wrap onto more lines instead of truncating,
   // and the row still stays uniform.
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP },
+  spacer: { borderWidth: 0, minHeight: 0 },
   card: {
-    flexBasis: '31%',
-    flexGrow: 0,
+    flexBasis: '30%',
+    flexGrow: 1,
     minHeight: 112,
     borderRadius: 16,
     borderWidth: 1.5,

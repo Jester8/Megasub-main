@@ -553,7 +553,7 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: 20, paddingBottom: 30 },
   confirmContent: { paddingHorizontal: 20, paddingTop: 10 },
   sectionLabel: { fontFamily: FONTS.semibold, fontSize: 13, color: '#6B7088', marginTop: 22, marginBottom: 10 },
-  networkRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  networkRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10 },
   networkPill: {
     flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14,
     borderRadius: 14, backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: '#ECEDF6',

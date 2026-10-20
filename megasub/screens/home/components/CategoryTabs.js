@@ -9,8 +9,12 @@ const FONTS = {
 // Segmented pill selector shared by Data/Airtime/Cable for picking a plan
 // category (e.g. SME / Awoof / Gifting, or a cable provider). Options may
 // carry a `logo` (image source) shown as a small rounded badge.
+const COLUMNS = 3;
+
 export default function CategoryTabs({ options, selectedId, onSelect, colors }) {
   if (!options || options.length === 0) return null;
+  // Spacers pad a short last row so its tabs stay the same width as the rest.
+  const spacerCount = (COLUMNS - (options.length % COLUMNS)) % COLUMNS;
   return (
     <View style={styles.row}>
       {options.map((opt) => {
@@ -35,6 +39,9 @@ export default function CategoryTabs({ options, selectedId, onSelect, colors }) 
           </TouchableOpacity>
         );
       })}
+      {Array.from({ length: spacerCount }, (_, i) => (
+        <View key={`spacer-${i}`} style={[styles.tab, styles.spacer]} />
+      ))}
     </View>
   );
 }
@@ -46,12 +53,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    // Fixed one-third width (no flexGrow) so every tab is the same size and
-    // a short last row doesn't stretch its tabs wider than the rest. Long
-    // labels wrap onto extra lines instead of truncating; minHeight keeps
-    // single-line tabs the same size as wrapped ones.
-    flexGrow: 0,
-    flexBasis: '31.5%',
+    // Three tabs grow to share each row equally, so they fill the width
+    // exactly on any screen (a fixed percentage plus a fixed gap left a
+    // ragged right edge on a full-width tablet); spacers keep a short last
+    // row's tabs the same size. Long labels wrap onto extra lines instead of
+    // truncating; minHeight keeps single-line tabs the same size as wrapped
+    // ones.
+    flexGrow: 1,
+    flexBasis: '30%',
     minHeight: 58,
     paddingVertical: 10,
     paddingHorizontal: 6,
@@ -64,4 +73,5 @@ const styles = StyleSheet.create({
   tabText: { fontFamily: FONTS.semibold, fontSize: 13, flexShrink: 1, textAlign: 'center', textTransform: 'capitalize' },
   tabTextActive: { color: '#FFFFFF', fontFamily: FONTS.bold },
   tabLogo: { width: 22, height: 22, borderRadius: 11 },
+  spacer: { borderWidth: 0, minHeight: 0, paddingVertical: 0 },
 });
