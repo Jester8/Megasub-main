@@ -6,9 +6,9 @@ import { requireNetworkOrShowError } from '../../../lib/network';
 import { alertForPurchaseError } from '../../../lib/format';
 import { SCHEDULE_TIMEZONE, toLagosIso, formatWhen } from '../../../lib/schedule';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { useIsFeatureHidden } from '../../../lib/featureAvailability';
 
 const BRAND = '#4A55DD';
-const tempDbg = (tag, extra) => __DEV__ && fetch('http://127.0.0.1:9787', { method: 'POST', body: JSON.stringify({ method: 'DBG', path: tag, json: extra }) }).catch(() => {}); // TEMP-DEBUG-RC
 
 // Shared by the Airtime, Data and Cable confirm screens: opens the schedule
 // sheet and sends the already-collected purchase to scheduled_purchases with
@@ -24,8 +24,7 @@ export default function useSchedulePurchase({ user, navigate, serviceType, getPu
   const [busy, setBusy] = useState(false);
 
   const submit = async ({ recurrence, startsAt }) => {
-    tempDbg('schedule_submit', { serviceType, recurrence, startsAt: String(startsAt), iso: toLagosIso(startsAt) });
-    if (!(await requireNetworkOrShowError())) { tempDbg('schedule_offline'); return; }
+    if (!(await requireNetworkOrShowError())) return;
 
     setBusy(true);
     try {
@@ -48,7 +47,6 @@ export default function useSchedulePurchase({ user, navigate, serviceType, getPu
         ]
       );
     } catch (error) {
-      tempDbg('schedule_error', { message: error.message, isNetworkError: error.isNetworkError, payload: error.payload });
       const alert = alertForPurchaseError(error);
       if (alert.isWrongPin) {
         setVisible(false);
@@ -93,6 +91,10 @@ export default function useSchedulePurchase({ user, navigate, serviceType, getPu
 // the dimming is kept lighter in dark mode so the white text still reads.
 export function ScheduleLink({ onPress, disabled }) {
   const { colors } = useTheme();
+  // Hidden on iOS while the server reports scheduling as not deployed yet
+  // (see lib/featureAvailability.js).
+  const hidden = useIsFeatureHidden('scheduled');
+  if (hidden) return null;
   return (
     <TouchableOpacity
       style={[styles.link, disabled && { opacity: colors.mode === 'dark' ? 0.7 : 0.45 }]}

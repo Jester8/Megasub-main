@@ -20,6 +20,7 @@ import { detectTransactionLogo } from '../../lib/logos';
 import { CATEGORY_STYLE, DEFAULT_STYLE, STATUS_LABELS, formatDateShort, toDateParam } from '../../lib/transactionMeta';
 
 import LogoLoader from './components/LogoLoader';
+import { SHOW_WITHDRAW } from '../../lib/featureAvailability';
 const FONTS = {
   regular: 'Montserrat_400Regular',
   medium: 'Montserrat_500Medium',
@@ -145,16 +146,20 @@ export default function Wallet({ navigate, user }) {
               <Ionicons name="add-circle" size={16} color="#4A55DD" />
               <Text style={styles.actionBtnText}>Fund Wallet</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.actionBtnOutline]}
-              activeOpacity={0.85}
-              onPress={() =>
-                Alert.alert('Coming Soon', 'Withdrawals aren\'t available yet — check back soon.')
-              }
-            >
-              <Feather name="arrow-up-right" size={16} color="#FFFFFF" />
-              <Text style={[styles.actionBtnText, styles.actionBtnTextOutline]}>Withdraw</Text>
-            </TouchableOpacity>
+            {/* Withdrawals have no backend yet; iOS hides the placeholder
+                button (App Review 2.1), Android keeps the notice. */}
+            {SHOW_WITHDRAW && (
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.actionBtnOutline]}
+                activeOpacity={0.85}
+                onPress={() =>
+                  Alert.alert('Coming Soon', 'Withdrawals aren\'t available yet — check back soon.')
+                }
+              >
+                <Feather name="arrow-up-right" size={16} color="#FFFFFF" />
+                <Text style={[styles.actionBtnText, styles.actionBtnTextOutline]}>Withdraw</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </LinearGradient>
 

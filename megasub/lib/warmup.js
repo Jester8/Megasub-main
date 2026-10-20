@@ -1,4 +1,4 @@
-import { InteractionManager } from 'react-native';
+import { InteractionManager, Platform } from 'react-native';
 import { queryClient } from './queryClient';
 import { queryKeys } from './queries';
 import {
@@ -8,6 +8,11 @@ import {
   fetchTransactions,
   fetchProductPlanCategories,
   fetchProductPlans,
+  fetchEsimCountries,
+  fetchVirtualCardProducts,
+  fetchResultCheckerProducts,
+  fetchScheduledPurchases,
+  fetchReferralSummary,
 } from './api';
 import { toDateParam } from './transactionMeta';
 
@@ -67,6 +72,18 @@ export function warmAppData(userId) {
           queryFn: () =>
             fetchTransactions({ userId, dateFrom: toDateParam(dateFrom), dateTo: toDateParam(dateTo) }),
         }),
+        // iOS only: one cheap call per optional V2 feature, so request()
+        // reports which ones the server hasn't deployed and their tiles are
+        // already hidden by the time Home renders (lib/featureAvailability.js).
+        ...(Platform.OS === 'ios'
+          ? [
+              fetchEsimCountries(userId),
+              fetchVirtualCardProducts(userId),
+              fetchResultCheckerProducts(userId),
+              fetchScheduledPurchases(userId),
+              fetchReferralSummary(),
+            ]
+          : []),
         ...CATALOG_SLUGS.map(({ slug, extraParams }) =>
           queryClient.prefetchQuery({
             queryKey: queryKeys.catalog(userId, slug),

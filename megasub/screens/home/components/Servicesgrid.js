@@ -9,7 +9,8 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useResponsive } from '../../../lib/responsive';
-import { SERVICES, HOME_SERVICES, SERVICE_SCREENS } from '../servicesConfig';
+import { SERVICES, SERVICE_SCREENS } from '../servicesConfig';
+import { useVisibleFeatures } from '../../../lib/featureAvailability';
 
 const PADDING = 20;
 const CARD_PADDING = 12;
@@ -99,13 +100,18 @@ export function ServiceGrid({ services, navigate, onServicePress, onSeeAllPress,
 }
 
 export function AllServicesGrid({ navigate }) {
-  return <ServiceGrid services={SERVICES} navigate={navigate} />;
+  const services = useVisibleFeatures(SERVICES);
+  return <ServiceGrid services={services} navigate={navigate} />;
 }
 
+// Home shows the first eight visible services; on iOS any service the server
+// reports as not deployed yet is left out (lib/featureAvailability.js), so the
+// next one moves up rather than leaving a gap.
 export default function ServicesGrid({ navigate, onServicePress, onSeeAllPress }) {
+  const services = useVisibleFeatures(SERVICES).slice(0, 8);
   return (
     <ServiceGrid
-      services={HOME_SERVICES}
+      services={services}
       navigate={navigate}
       onServicePress={onServicePress}
       onSeeAllPress={onSeeAllPress}

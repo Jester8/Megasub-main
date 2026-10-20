@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import { alertForPurchaseError } from './format';
+import { reportPathAvailability } from './featureAvailability';
 
 // Matches the BASE_URL already used by login.jsx / signup.jsx / verify.jsx.
 export const BASE_URL = 'https://mega-sub.com/api/v1/external';
@@ -177,10 +178,6 @@ async function request(path, { method = 'GET', body, params } = {}) {
   }
 
   const json = await response.json().catch(() => ({}));
-  // TEMP-DEBUG-RC: remove after mapping result checker / schedule shapes
-  if (__DEV__ && /result_checker|scheduled_purchases|fetch_transactions|referrals|card_kyc|virtual_card|card/.test(path)) {
-    fetch('http://127.0.0.1:9787', { method: 'POST', body: JSON.stringify({ method, path, params, json }) }).catch(() => {});
-  }
 
   if (!response.ok || json.status === false) {
     console.log(`❌ API error on ${path}`, JSON.stringify({ httpStatus: response.status, sent: redactBody(body), received: json }));
@@ -215,6 +212,7 @@ async function request(path, { method = 'GET', body, params } = {}) {
       error.payload = json;
       error.isRouteMissing = true;
       error.isUnavailable = true;
+      reportPathAvailability(path, false);
       throw error;
     }
 
@@ -239,6 +237,7 @@ async function request(path, { method = 'GET', body, params } = {}) {
       const error = new Error(json.message || 'This product is temporarily unavailable.');
       error.payload = json;
       error.isUnavailable = true;
+      reportPathAvailability(path, false);
       throw error;
     }
 
@@ -258,6 +257,7 @@ async function request(path, { method = 'GET', body, params } = {}) {
     throw error;
   }
 
+  reportPathAvailability(path, true);
   return json;
 }
 

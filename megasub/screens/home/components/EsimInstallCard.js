@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { parseLpaCode } from '../../../lib/format';
@@ -63,8 +63,11 @@ export default function EsimInstallCard({ esim, colors }) {
         ) : null}
         <CopyRow label="Full activation link" value={esim.activation_code} colors={colors} />
         <Text style={[styles.steps, { color: colors.textFaint }]}>
-          iPhone: Settings, Mobile Service, Add eSIM, Enter Details Manually. Android: Settings, Network, SIMs, Add
-          eSIM, then enter the code.
+          {/* Each platform only sees its own steps — App Review rejects iOS
+              builds that mention other platforms (guideline 2.3.10). */}
+          {Platform.OS === 'ios'
+            ? 'Go to Settings, Mobile Service, Add eSIM, Enter Details Manually, then enter the details above.'
+            : 'Go to Settings, Network, SIMs, Add eSIM, then enter the code above.'}
         </Text>
       </View>
     </View>

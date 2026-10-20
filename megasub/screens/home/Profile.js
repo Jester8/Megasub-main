@@ -20,10 +20,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
+import * as StoreReview from 'expo-store-review';
 import BottomNav from './components/BottomNav';
 import { useTheme } from '../../contexts/ThemeContext';
 import { clearCachedVirtualAccounts, deleteAccount, updateFingerprintOption, fetchKycStatus } from '../../lib/api';
 import { unregisterPushDevice, forgetPushRegistration } from '../../lib/pushNotifications';
+import { useIsFeatureHidden } from '../../lib/featureAvailability';
 
 const BIOMETRIC_LABEL = Platform.OS === 'ios' ? 'Face ID' : 'Fingerprint';
 
@@ -73,6 +75,7 @@ export default function Profile({ navigate, user }) {
   const insets = useSafeAreaInsets();
   const { colors, isDark, toggleTheme } = useTheme();
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const referralsHidden = useIsFeatureHidden('refer-earn');
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -149,12 +152,19 @@ export default function Profile({ navigate, user }) {
     'Guest User';
   const contact = user?.email || user?.phone_number || 'Not set';
 
-  // Opens the Play Store listing: the store app first, then the web page if no
-  // store app can handle the link. The App Store listing isn't linked yet, so
-  // iOS keeps the friendly message.
+  // Android opens the Play Store listing: the store app first, then the web
+  // page if no store app can handle the link. iOS uses Apple's own in-app
+  // review prompt (StoreReview), which needs no App Store ID and is what App
+  // Review expects instead of a custom rating flow.
   const handleRateApp = async () => {
-    if (Platform.OS !== 'android') {
-      Alert.alert('Rate Megasub', "Thanks for the love! We'll link the App Store listing here soon.");
+    if (Platform.OS === 'ios') {
+      try {
+        if (await StoreReview.isAvailableAsync()) {
+          await StoreReview.requestReview();
+          return;
+        }
+      } catch {}
+      Alert.alert('Rate Megasub', 'Thanks for using Megasub! You can rate us on the App Store.');
       return;
     }
     try {
@@ -336,15 +346,19 @@ export default function Profile({ navigate, user }) {
             colors={colors}
             onPress={() => navigate && navigate('history')}
           />
-          <View style={[styles.rowDivider, { backgroundColor: colors.divider }]} />
-          <Row
-            icon="gift-outline"
-            color="#EC4899"
-            bg="rgba(236,72,153,0.1)"
-            label="Refer & Earn"
-            colors={colors}
-            onPress={() => navigate && navigate('refer-earn')}
-          />
+          {!referralsHidden && (
+            <>
+              <View style={[styles.rowDivider, { backgroundColor: colors.divider }]} />
+              <Row
+                icon="gift-outline"
+                color="#EC4899"
+                bg="rgba(236,72,153,0.1)"
+                label="Refer & Earn"
+                colors={colors}
+                onPress={() => navigate && navigate('refer-earn')}
+              />
+            </>
+          )}
         </Section>
 
         <Section title="Support" colors={colors}>
