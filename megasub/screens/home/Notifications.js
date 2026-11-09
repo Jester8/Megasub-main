@@ -27,6 +27,8 @@ import {
   formatDate,
   toDateParam,
 } from '../../lib/transactionMeta';
+import CodeInput from './components/CodeInput';
+import { getSessionFunding, setSessionFunding, isFundingSuccessful } from '../../lib/fundingSession';
 
 const FONTS = {
   regular: 'Montserrat_400Regular',
@@ -39,9 +41,6 @@ const BRAND = '#4A55DD';
 const WALLET_VISUAL = { icon: 'wallet-outline', color: '#16A34A' };
 const FETCH_WINDOW_DAYS = 62;
 
-function isFundingSuccessful(funding) {
-  return funding.status === 'SUCCESSFUL' || funding.funding_status === 'success';
-}
 
 // This card keeps a light pastel background (STATUS_BG) in both light and
 // dark mode, so its text must stay fixed-dark too — following colors.text
@@ -79,13 +78,12 @@ export default function Notifications({ navigate, user }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [fundingTx, setFundingTx] = useState([]);
-  const [fundingUnlocked, setFundingUnlocked] = useState(false);
+  const [fundingTx, setFundingTx] = useState(() => getSessionFunding() || []);
+  const [fundingUnlocked, setFundingUnlocked] = useState(() => !!getSessionFunding());
   const [pinModalVisible, setPinModalVisible] = useState(false);
   const [pin, setPin] = useState('');
   const [fundingLoading, setFundingLoading] = useState(false);
   const [fundingError, setFundingError] = useState(null);
-  const pinInputs = useRef([]);
 
   const [selectedTx, setSelectedTx] = useState(null);
 
@@ -122,6 +120,7 @@ export default function Notifications({ navigate, user }) {
     try {
       const json = await fetchNairaFundingTransactions({ userId: user?.id, pin });
       setFundingTx(json.data || []);
+      setSessionFunding(json.data || []);
       setFundingUnlocked(true);
       setPinModalVisible(false);
       setPin('');
@@ -258,27 +257,16 @@ export default function Notifications({ navigate, user }) {
             <Text style={[styles.subtitle, { color: colors.textMuted, marginBottom: 16 }]}>
               Needed to view wallet funding history
             </Text>
-            <View style={styles.pinInputRow}>
-              {[0, 1, 2, 3].map((index) => (
-                <TextInput
-                  key={index}
-                  ref={(ref) => (pinInputs.current[index] = ref)}
-                  style={[styles.pinBox, { color: colors.text, backgroundColor: colors.cardAlt, borderColor: colors.border }]}
-                  keyboardType="number-pad"
-                  maxLength={1}
-                  secureTextEntry
-                  value={pin[index] || ''}
-                  onChangeText={(text) => {
-                    const digits = pin.split('');
-                    digits[index] = text.slice(-1);
-                    const next = digits.join('').slice(0, 4);
-                    setPin(next);
-                    if (text && index < 3) pinInputs.current[index + 1]?.focus();
-                  }}
-                  textAlign="center"
-                />
-              ))}
-            </View>
+            <CodeInput
+              length={4}
+              value={pin}
+              onChange={setPin}
+              colors={{ text: colors.text, card: colors.cardAlt, border: colors.border }}
+              secure
+              autoFocus
+              containerStyle={styles.pinInputRow}
+              boxStyle={styles.pinBox}
+            />
             {fundingError ? <Text style={styles.pinError}>{fundingError}</Text> : null}
             <TouchableOpacity
               style={[styles.pinConfirmBtn, (pin.length < 4 || fundingLoading) && styles.pinConfirmBtnDisabled]}

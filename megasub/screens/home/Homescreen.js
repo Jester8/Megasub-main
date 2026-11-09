@@ -55,6 +55,7 @@ export default function HomeScreen({ navigate, user, onRefreshWallet }) {
         userData={user}
         notifCount={0}
         onNotifPress={() => navigate('notifications')}
+        onProfilePress={() => navigate('profile')}
       />
 
       {/* Main content body handles screen fitting dynamically */}

@@ -32,6 +32,8 @@ const EXAM_LOGOS = {
 import { formatNaira, alertForPurchaseError, sanitizePositiveInt, requestErrorTitle } from '../../../lib/format';
 import { queryKeys } from '../../../lib/queries';
 import { extractResultCheckerPins, saveResultCheckerHistoryRecord } from '../../../lib/resultCheckerHistory';
+import CodeInput from '../components/CodeInput';
+import useStepBack from '../../../lib/useStepBack';
 
 const FONTS = {
   regular: 'Montserrat_400Regular',
@@ -48,51 +50,21 @@ const MAX_QUANTITY = 10;
 // Expo — matches the pattern already used in Airtime.js/Data.js/Cable.js/
 // Electricity.js/Bulk.js rather than introducing a shared component.
 function CustomPinInput({ onPinComplete, colors }) {
-  const [code, setCode] = useState(['', '', '', '']);
-  const inputs = useRef([]);
-
-  const handleChangeText = (text, index) => {
-    const newCode = [...code];
-    const cleanText = text.slice(-1);
-    newCode[index] = cleanText;
-    setCode(newCode);
-
-    onPinComplete(newCode.join(''));
-
-    if (cleanText && index < 3) {
-      inputs.current[index + 1].focus();
-    } else if (!cleanText && index > 0) {
-      inputs.current[index - 1].focus();
-    }
-  };
-
-  const handleKeyPress = (e, index) => {
-    if (e.nativeEvent.key === 'Backspace' && !code[index] && index > 0) {
-      inputs.current[index - 1].focus();
-    }
-  };
-
+  const [pin, setPinValue] = useState('');
   return (
-    <View style={styles.otpContainer}>
-      {code.map((digit, index) => (
-        <TextInput
-          key={index}
-          ref={(ref) => (inputs.current[index] = ref)}
-          style={[
-            styles.otpInputBox,
-            { color: colors?.text, backgroundColor: colors?.card, borderColor: colors?.border },
-            digit ? styles.otpInputFilled : null,
-          ]}
-          keyboardType="number-pad"
-          maxLength={1}
-          secureTextEntry={true}
-          value={digit}
-          onChangeText={(text) => handleChangeText(text, index)}
-          onKeyPress={(e) => handleKeyPress(e, index)}
-          textAlign="center"
-        />
-      ))}
-    </View>
+    <CodeInput
+      length={4}
+      value={pin}
+      onChange={(next) => {
+        setPinValue(next);
+        onPinComplete(next);
+      }}
+      colors={colors}
+      secure
+      containerStyle={styles.otpContainer}
+      boxStyle={styles.otpInputBox}
+      filledStyle={styles.otpInputFilled}
+    />
   );
 }
 
@@ -143,6 +115,10 @@ export default function ResultChecker({ navigate, user }) {
 
   // Step Workflow Toggle: 'input' (Form screen), 'confirm' (Pin screen), 'success'
   const [step, setStep] = useState('input');
+  useStepBack(() => {
+    if (step === 'confirm') { setStep('input'); return true; }
+    return false;
+  });
 
   // Catalog State — one entry per exam board (e.g. WAEC, NECO), each with
   // its own unit price per PIN.

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useResponsive } from '../../../lib/responsive';
+import { useBalanceHidden } from '../../../lib/balanceVisibility';
 
 const FONTS = {
   regular: 'Montserrat_400Regular',
@@ -19,7 +20,7 @@ const FONTS = {
 
 // Expects userData object containing your dashboard payload fields (passed down from navigation/parent context)
 export default function WalletCard({ userData, onTopUp }) {
-  const [hidden, setHidden] = useState(false);
+  const [hidden, setHidden] = useBalanceHidden();
   const { isTablet } = useResponsive();
 
   // Safely extract main_wallet balance string and convert it to float (handles "0" string types from API payload)

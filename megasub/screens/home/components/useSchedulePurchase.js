@@ -67,7 +67,7 @@ export default function useSchedulePurchase({ user, navigate, serviceType, getPu
         setVisible(false);
         Alert.alert(alert.title, alert.message, [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Verify Phone', onPress: () => navigate && navigate('verify', user) },
+          { text: 'Verify Phone', onPress: () => navigate && navigate('verify-phone', user) },
         ]);
       } else {
         Alert.alert('Could not schedule', error.message || 'Please check the details and try again.');

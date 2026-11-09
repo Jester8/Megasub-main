@@ -26,9 +26,11 @@ import ContactPicker from '../components/ContactPicker';
 import WrongPinModal from '../components/WrongPinModal';
 import ScheduleSheet from '../components/ScheduleSheet';
 import useSchedulePurchase, { ScheduleLink } from '../components/useSchedulePurchase';
-import { detectNetworkFromPhone, findNetworkByLabel } from '../../../lib/networkDetect';
+import { detectNetworkFromPhone, findNetworkByLabel, networkMismatch } from '../../../lib/networkDetect';
 import { formatNaira, alertForPurchaseError, stripNetworkPrefix, formatPlanTitle, requestErrorTitle } from '../../../lib/format';
 import CouponCheck from '../components/CouponCheck';
+import CodeInput from '../components/CodeInput';
+import useStepBack from '../../../lib/useStepBack';
 
 const FONTS = {
   regular: 'Montserrat_400Regular',
@@ -57,54 +59,21 @@ const NETWORK_LOGOS = {
 };
 
 function CustomPinInput({ onPinComplete, colors }) {
-  const [code, setCode] = useState(['', '', '', '']);
-  const inputs = useRef([]);
-
-  const handleChangeText = (text, index) => {
-    const newCode = [...code];
-    const cleanText = text.slice(-1);
-    newCode[index] = cleanText;
-    setCode(newCode);
-
-    onPinComplete(newCode.join(''));
-
-    if (cleanText && index < 3) {
-      inputs.current[index + 1].focus();
-    } else if (!cleanText && index > 0) {
-      // Deleting used to just clear the box and leave focus there, so the
-      // very next backspace press had nothing to do — advancing back to the
-      // previous box here means backspacing flows continuously across boxes.
-      inputs.current[index - 1].focus();
-    }
-  };
-
-  const handleKeyPress = (e, index) => {
-    if (e.nativeEvent.key === 'Backspace' && !code[index] && index > 0) {
-      inputs.current[index - 1].focus();
-    }
-  };
-
+  const [pin, setPinValue] = useState('');
   return (
-    <View style={styles.otpContainer}>
-      {code.map((digit, index) => (
-        <TextInput
-          key={index}
-          ref={(ref) => (inputs.current[index] = ref)}
-          style={[
-            styles.otpInputBox,
-            { color: colors?.text, backgroundColor: colors?.card, borderColor: colors?.border },
-            digit ? styles.otpInputFilled : null,
-          ]}
-          keyboardType="number-pad"
-          maxLength={1}
-          secureTextEntry={true}
-          value={digit}
-          onChangeText={(text) => handleChangeText(text, index)}
-          onKeyPress={(e) => handleKeyPress(e, index)}
-          textAlign="center"
-        />
-      ))}
-    </View>
+    <CodeInput
+      length={4}
+      value={pin}
+      onChange={(next) => {
+        setPinValue(next);
+        onPinComplete(next);
+      }}
+      colors={colors}
+      secure
+      containerStyle={styles.otpContainer}
+      boxStyle={styles.otpInputBox}
+      filledStyle={styles.otpInputFilled}
+    />
   );
 }
 
@@ -128,6 +97,10 @@ export default function Data({ navigate, user }) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const [step, setStep] = useState('input');
+  useStepBack(() => {
+    if (step === 'confirm') { setStep('input'); return true; }
+    return false;
+  });
 
   const { data: networks = [], isLoading: loadingNetworks } = useNetworksQuery(user?.id);
   const [categories, setCategories] = useState([]);
@@ -197,8 +170,24 @@ export default function Data({ navigate, user }) {
     }
   };
 
+  const mismatchedNetwork = networkMismatch(phone, selectedNetwork);
+
   const handleFormSubmit = () => {
     if (!selectedNetwork || !isValidPhone(phone) || !selectedCategory || !selectedPlan) return;
+    // A recharge on the wrong network fails at the provider (or lands on
+    // the wrong line), so a number that looks like another network is
+    // confirmed first. Ported numbers are real, so it's a warning, not a block.
+    if (mismatchedNetwork) {
+      Alert.alert(
+        'Check the Network',
+        `${phone} looks like a ${mismatchedNetwork} number, but ${selectedNetwork.network_name} is selected. Continue anyway?`,
+        [
+          { text: 'Change Network', style: 'cancel' },
+          { text: 'Continue', onPress: () => setStep('confirm') },
+        ]
+      );
+      return;
+    }
     setStep('confirm');
   };
 
@@ -251,7 +240,7 @@ export default function Data({ navigate, user }) {
       } else if (alert.requiresPhoneVerification) {
         Alert.alert(alert.title, alert.message, [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Verify Phone', onPress: () => navigate && navigate('verify', user) },
+          { text: 'Verify Phone', onPress: () => navigate && navigate('verify-phone', user) },
         ]);
       } else {
         Alert.alert(alert.title, alert.message);
@@ -365,8 +354,13 @@ export default function Data({ navigate, user }) {
               <Feather name="user-plus" size={18} color={BRAND} />
             </TouchableOpacity>
           </View>
+          {mismatchedNetwork ? (
+            <Text style={styles.networkWarnText}>
+              This looks like a {mismatchedNetwork} number, but {selectedNetwork?.network_name} is selected.
+            </Text>
+          ) : null}
 
-          <CouponCheck userId={user?.id} colors={colors} productSlug="data" onApplied={setAppliedCoupon} />
+          <CouponCheck userId={user?.id} colors={colors} productSlug="data" networkId={selectedNetwork?.id} onApplied={setAppliedCoupon} />
 
           {selectedNetwork ? (
             <>
@@ -502,6 +496,9 @@ export default function Data({ navigate, user }) {
         </View>
       )}
       <ScheduleSheet
+        // The schedule is authorised with the PIN typed on this confirm
+        // screen; testers read the missing PIN box here as "no PIN asked".
+        note="Authorised with the transaction PIN you just entered."
         visible={schedule.visible}
         busy={schedule.busy}
         colors={colors}
@@ -527,6 +524,7 @@ export default function Data({ navigate, user }) {
 }
 
 const styles = StyleSheet.create({
+  networkWarnText: { fontFamily: FONTS.medium, fontSize: 12, color: '#B45309', marginTop: 6, marginLeft: 4 },
   screen: { flex: 1, backgroundColor: '#F7F8FC' },
   header: {
     flexDirection: 'row',

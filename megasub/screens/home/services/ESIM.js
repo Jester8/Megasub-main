@@ -19,6 +19,8 @@ import WrongPinModal from '../components/WrongPinModal';
 import UnavailableNotice from '../components/UnavailableNotice';
 import EsimInstallCard from '../components/EsimInstallCard';
 import { alertForPurchaseError, formatUsd, requestErrorTitle } from '../../../lib/format';
+import CodeInput from '../components/CodeInput';
+import useStepBack from '../../../lib/useStepBack';
 
 const FONTS = {
   regular: 'Montserrat_400Regular',
@@ -33,46 +35,21 @@ const BRAND = '#4A55DD';
 // Matches the pattern already used in Airtime.js/ResultChecker.js/etc
 // rather than a shared component.
 function CustomPinInput({ onPinComplete, colors }) {
-  const [code, setCode] = useState(['', '', '', '']);
-  const inputs = useRef([]);
-
-  const handleChangeText = (text, index) => {
-    const newCode = [...code];
-    const cleanText = text.slice(-1);
-    newCode[index] = cleanText;
-    setCode(newCode);
-    onPinComplete(newCode.join(''));
-    if (cleanText && index < 3) inputs.current[index + 1].focus();
-    else if (!cleanText && index > 0) inputs.current[index - 1].focus();
-  };
-
-  const handleKeyPress = (e, index) => {
-    if (e.nativeEvent.key === 'Backspace' && !code[index] && index > 0) {
-      inputs.current[index - 1].focus();
-    }
-  };
-
+  const [pin, setPinValue] = useState('');
   return (
-    <View style={styles.otpContainer}>
-      {code.map((digit, index) => (
-        <TextInput
-          key={index}
-          ref={(ref) => (inputs.current[index] = ref)}
-          style={[
-            styles.otpInputBox,
-            { color: colors?.text, backgroundColor: colors?.card, borderColor: colors?.border },
-            digit ? styles.otpInputFilled : null,
-          ]}
-          keyboardType="number-pad"
-          maxLength={1}
-          secureTextEntry={true}
-          value={digit}
-          onChangeText={(text) => handleChangeText(text, index)}
-          onKeyPress={(e) => handleKeyPress(e, index)}
-          textAlign="center"
-        />
-      ))}
-    </View>
+    <CodeInput
+      length={4}
+      value={pin}
+      onChange={(next) => {
+        setPinValue(next);
+        onPinComplete(next);
+      }}
+      colors={colors}
+      secure
+      containerStyle={styles.otpContainer}
+      boxStyle={styles.otpInputBox}
+      filledStyle={styles.otpInputFilled}
+    />
   );
 }
 
@@ -82,6 +59,11 @@ export default function ESIM({ navigate, user }) {
 
   // Step Workflow: 'country' -> 'plans' -> 'confirm' -> 'success'
   const [step, setStep] = useState('country');
+  useStepBack(() => {
+    if (step === 'confirm') { setStep('plans'); return true; }
+    if (step === 'plans') { setStep('country'); return true; }
+    return false;
+  });
 
   const [countries, setCountries] = useState([]);
   const [loadingCountries, setLoadingCountries] = useState(true);

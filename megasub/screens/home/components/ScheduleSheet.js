@@ -34,6 +34,7 @@ export default function ScheduleSheet({
   busy = false,
   initialRecurrence = 'once',
   initialDate = null,
+  note = null,
   colors,
 }) {
   const [recurrence, setRecurrence] = useState(initialRecurrence);
@@ -166,6 +167,9 @@ export default function ScheduleSheet({
           <Text style={[styles.summary, { color: muted }]}>
             {formatWhen(when)} (Nigeria time)
           </Text>
+          {note ? (
+            <Text style={[styles.summary, { color: muted }]}>{note}</Text>
+          ) : null}
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
           <TouchableOpacity

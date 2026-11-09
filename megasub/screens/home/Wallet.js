@@ -8,6 +8,8 @@ import {
   ScrollView,
   StatusBar,
   Alert,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, Feather } from '@expo/vector-icons';
@@ -15,7 +17,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomNav from './components/BottomNav';
 import ReceiptModal from './components/ReceiptModal';
 import { useTheme } from '../../contexts/ThemeContext';
-import { fetchTransactions } from '../../lib/api';
+import { fetchTransactions, fetchNairaFundingTransactions } from '../../lib/api';
+import { getSessionFunding, setSessionFunding, isFundingSuccessful } from '../../lib/fundingSession';
+import CodeInput from './components/CodeInput';
+import { useBalanceHidden } from '../../lib/balanceVisibility';
 import { detectTransactionLogo } from '../../lib/logos';
 import { CATEGORY_STYLE, DEFAULT_STYLE, STATUS_LABELS, formatDateShort, toDateParam } from '../../lib/transactionMeta';
 
@@ -32,6 +37,31 @@ const FONTS = {
 const BRAND = '#4A55DD';
 const VISIBLE_COUNT = 8;
 const WINDOW_DAYS = 30;
+
+// A bank transfer into the wallet. These come from a separate, PIN-gated
+// endpoint, so they're drawn here rather than through ActivityItem.
+function FundingItem({ funding, colors }) {
+  const ok = isFundingSuccessful(funding);
+  const amount = Number(funding.amount_settled || funding.amount_paid || 0);
+  return (
+    <View style={styles.txItem}>
+      <View style={[styles.txIconWrap, { backgroundColor: '#E8F7EE' }]}>
+        <Ionicons name="wallet-outline" size={20} color="#16A34A" />
+      </View>
+      <View style={styles.txInfo}>
+        <Text style={[styles.txTitle, { color: colors.text }]} numberOfLines={1}>Wallet Funded</Text>
+        <Text style={[styles.txSubtitle, { color: colors.textMuted }]} numberOfLines={1}>
+          {formatDateShort(funding.created_at)}
+          {funding.bank_name ? ` · ${String(funding.bank_name).toUpperCase()}` : ''}
+        </Text>
+      </View>
+      <View style={styles.txRight}>
+        <Text style={[styles.txAmount, { color: '#16A34A' }]}>+₦{amount.toLocaleString()}</Text>
+        <Text style={[styles.txStatus, { color: colors.textFaint }]}>{ok ? 'Successful' : 'Failed'}</Text>
+      </View>
+    </View>
+  );
+}
 
 function ActivityItem({ tx, colors, onPress }) {
   const visual = CATEGORY_STYLE[tx.transaction_category] || DEFAULT_STYLE;
@@ -62,11 +92,43 @@ function ActivityItem({ tx, colors, onPress }) {
 export default function Wallet({ navigate, user }) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
-  const [hidden, setHidden] = useState(false);
+  const [hidden, setHidden] = useBalanceHidden();
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedTx, setSelectedTx] = useState(null);
+
+  // Funding credits need the transaction PIN to read (see lib/fundingSession).
+  const [funding, setFunding] = useState(() => getSessionFunding());
+  const [pinVisible, setPinVisible] = useState(false);
+  const [pin, setPin] = useState('');
+  const [pinBusy, setPinBusy] = useState(false);
+  const [pinError, setPinError] = useState(null);
+
+  const unlockFunding = async () => {
+    if (pin.length < 4) return;
+    setPinBusy(true);
+    setPinError(null);
+    try {
+      const json = await fetchNairaFundingTransactions({ userId: user?.id, pin });
+      setFunding(json.data || []);
+      setSessionFunding(json.data || []);
+      setPinVisible(false);
+      setPin('');
+    } catch (err) {
+      setPinError(err.message || 'Could not verify your PIN. Please try again.');
+    } finally {
+      setPinBusy(false);
+    }
+  };
+
+  // Purchases and funding credits in one list, newest first.
+  const activity = [
+    ...transactions.map((tx) => ({ kind: 'tx', key: `tx-${tx.id}`, at: tx.created_at, tx })),
+    ...(funding || []).map((f) => ({ kind: 'funding', key: `fund-${f.id}`, at: f.created_at, funding: f })),
+  ]
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+    .slice(0, VISIBLE_COUNT);
 
   const walletBalance = user?.main_wallet ? parseFloat(user.main_wallet) : 0.0;
   const formatted = '₦' + walletBalance.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
@@ -178,7 +240,7 @@ export default function Wallet({ navigate, user }) {
               <Feather name="wifi-off" size={28} color="#B7BCEF" />
               <Text style={[styles.emptyText, { color: colors.textMuted }]}>{error}</Text>
             </View>
-          ) : transactions.length === 0 ? (
+          ) : activity.length === 0 ? (
             <View style={styles.emptyState}>
               <Feather name="inbox" size={28} color="#B7BCEF" />
               <Text style={[styles.emptyText, { color: colors.textMuted }]}>No recent activity</Text>
@@ -187,14 +249,33 @@ export default function Wallet({ navigate, user }) {
               </Text>
             </View>
           ) : (
-            transactions.map((tx, index) => (
-              <View key={tx.id}>
-                <ActivityItem tx={tx} colors={colors} onPress={() => setSelectedTx(tx)} />
-                {index < transactions.length - 1 && <View style={[styles.divider, { backgroundColor: colors.divider }]} />}
+            activity.map((item, index) => (
+              <View key={item.key}>
+                {item.kind === 'funding' ? (
+                  <FundingItem funding={item.funding} colors={colors} />
+                ) : (
+                  <ActivityItem tx={item.tx} colors={colors} onPress={() => setSelectedTx(item.tx)} />
+                )}
+                {index < activity.length - 1 && <View style={[styles.divider, { backgroundColor: colors.divider }]} />}
               </View>
             ))
           )}
         </View>
+
+        {!funding && (
+          <TouchableOpacity
+            style={[styles.fundingRow, { backgroundColor: colors.card }]}
+            activeOpacity={0.8}
+            onPress={() => {
+              setPinError(null);
+              setPinVisible(true);
+            }}
+          >
+            <Ionicons name="wallet-outline" size={18} color={colors.brandText || BRAND} />
+            <Text style={[styles.fundingRowText, { color: colors.text }]}>Show wallet funding</Text>
+            <Text style={[styles.fundingRowHint, { color: colors.textFaint }]}>PIN required</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
       <BottomNav
@@ -204,6 +285,37 @@ export default function Wallet({ navigate, user }) {
           navigate && navigate(tab);
         }}
       />
+
+      <Modal visible={pinVisible} transparent animationType="fade" onRequestClose={() => !pinBusy && setPinVisible(false)}>
+        <View style={styles.pinOverlay}>
+          <View style={[styles.pinCard, { backgroundColor: colors.card }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Enter Transaction PIN</Text>
+            <Text style={[styles.pinSubtitle, { color: colors.textMuted }]}>Needed to show your wallet funding</Text>
+            <CodeInput
+              length={4}
+              value={pin}
+              onChange={setPin}
+              colors={{ text: colors.text, card: colors.cardAlt || colors.background, border: colors.border }}
+              secure
+              autoFocus
+              containerStyle={styles.pinRow}
+              boxStyle={styles.pinBox}
+            />
+            {pinError ? <Text style={styles.pinError}>{pinError}</Text> : null}
+            <TouchableOpacity
+              style={[styles.pinConfirm, (pin.length < 4 || pinBusy) && { opacity: 0.5 }]}
+              onPress={unlockFunding}
+              disabled={pin.length < 4 || pinBusy}
+              activeOpacity={0.85}
+            >
+              {pinBusy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.pinConfirmText}>Confirm</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.pinCancel} onPress={() => !pinBusy && setPinVisible(false)}>
+              <Text style={[styles.pinCancelText, { color: colors.textMuted }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <ReceiptModal
         visible={!!selectedTx}
@@ -289,4 +401,18 @@ const styles = StyleSheet.create({
   txAmount: { fontFamily: FONTS.bold, fontSize: 13.5 },
   txStatus: { fontFamily: FONTS.regular, fontSize: 10.5, marginTop: 2 },
   divider: { height: 1, backgroundColor: 'rgba(11,13,26,0.06)', marginVertical: 2 },
+
+  fundingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 14, marginTop: 12 },
+  fundingRowText: { flex: 1, fontFamily: FONTS.semibold, fontSize: 13.5 },
+  fundingRowHint: { fontFamily: FONTS.regular, fontSize: 11.5 },
+  pinOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
+  pinCard: { width: '86%', borderRadius: 24, padding: 22 },
+  pinSubtitle: { fontFamily: FONTS.regular, fontSize: 12, marginTop: 4, marginBottom: 16 },
+  pinRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, marginBottom: 8 },
+  pinBox: { flex: 1, height: 50, borderWidth: 2, borderRadius: 12, fontSize: 20, fontWeight: '700' },
+  pinError: { fontFamily: FONTS.medium, fontSize: 12, color: '#EF4444', marginTop: 8, textAlign: 'center' },
+  pinConfirm: { backgroundColor: BRAND, borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginTop: 14 },
+  pinConfirmText: { fontFamily: FONTS.bold, fontSize: 14, color: '#FFFFFF' },
+  pinCancel: { alignItems: 'center', paddingVertical: 12, marginTop: 4 },
+  pinCancelText: { fontFamily: FONTS.semibold, fontSize: 13.5 },
 });

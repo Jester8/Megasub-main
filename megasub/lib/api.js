@@ -139,9 +139,99 @@ function redactBody(body) {
   );
 }
 
+// Framework placeholders that say nothing about what went wrong.
+const GENERIC_SERVER_MESSAGES = /^(server error|internal server error|something went wrong\.?|an error occurred\.?|whoops.*|error)$/i;
+
+function specificServerMessage(json) {
+  const message = readableMessage(json?.message);
+  if (!message || GENERIC_SERVER_MESSAGES.test(message.trim())) return firstFieldError(json);
+  // Stack traces and SQL errors are not for users.
+  if (/sqlstate|exception|stack trace|undefined (index|variable|method)|\.php/i.test(message)) return null;
+  return message;
+}
+
+function isGenericValidationMessage(message) {
+  return !message || /^(validation failed|the given data was invalid\.?)$/i.test(String(message).trim()) || /^validation\.\w+/i.test(String(message));
+}
+
+// Laravel answers with untranslated keys ("validation.integer (and 1 more
+// error)") when its language files are missing. Turned into plain English
+// so a user never sees a code.
+const VALIDATION_KEY_TEXT = {
+  integer: 'must be a whole number',
+  numeric: 'must be a number',
+  required: 'is required',
+  min: 'is below the minimum allowed',
+  max: 'is above the maximum allowed',
+  digits: 'has the wrong number of digits',
+  same: 'does not match',
+  confirmed: 'does not match its confirmation',
+  in: 'is not a valid option',
+  exists: 'was not found',
+  unique: 'is already in use',
+};
+
+function readableMessage(message) {
+  if (!message) return message;
+  const text = String(message);
+  const key = text.match(/^validation\.(\w+)/i);
+  if (!key) return text;
+  const reason = VALIDATION_KEY_TEXT[key[1].toLowerCase()];
+  return reason ? `A value you entered ${reason}. Please check and try again.` : 'Some details were not accepted. Please check and try again.';
+}
+
+// For the few screens that call fetch() directly instead of request().
+export function describeApiError(json) {
+  const fieldMessage = firstFieldError(json);
+  if (isGenericValidationMessage(json?.message) && fieldMessage) return fieldMessage;
+  return readableMessage(json?.message) || fieldMessage || null;
+}
+
+function firstFieldError(json) {
+  const errors = json?.errors || json?.data?.errors;
+  if (!errors || typeof errors !== 'object') return null;
+  for (const [field, value] of Object.entries(errors)) {
+    const raw = Array.isArray(value) ? value[0] : value;
+    if (!raw) continue;
+    const key = String(raw).match(/^validation\.(\w+)/i);
+    if (key) {
+      const label = field.replace(/_/g, ' ');
+      const reason = VALIDATION_KEY_TEXT[key[1].toLowerCase()] || 'is not valid';
+      return `${label.charAt(0).toUpperCase()}${label.slice(1)} ${reason}.`;
+    }
+    return String(raw);
+  }
+  return null;
+}
+
 // This API always responds with HTTP 200 and signals success/failure through
 // the JSON `status` field, so response.ok alone can't be trusted.
-async function request(path, { method = 'GET', body, params } = {}) {
+// A purchase that is already on its way must not be sent a second time by
+// a double tap (or a tap while the first reply is slow): the same POST to a
+// money-moving path, with the same body, shares the request already in
+// flight instead of charging twice. The server still needs its own
+// duplicate check — this only covers taps on this device.
+const MONEY_PATH = /^(buy_|scheduled_purchases|fund_card|create_card)/;
+const inFlight = new Map();
+
+function request(path, options = {}) {
+  const { method = 'GET', body } = options;
+  const isMoney = method === 'POST' && MONEY_PATH.test(path) && !(typeof FormData !== 'undefined' && body instanceof FormData);
+  if (!isMoney) return sendRequest(path, options);
+
+  let key;
+  try {
+    key = `${path}:${JSON.stringify(body || {})}`;
+  } catch {
+    return sendRequest(path, options);
+  }
+  if (inFlight.has(key)) return inFlight.get(key);
+  const promise = sendRequest(path, options).finally(() => inFlight.delete(key));
+  inFlight.set(key, promise);
+  return promise;
+}
+
+async function sendRequest(path, { method = 'GET', body, params } = {}) {
   const token = await SecureStore.getItemAsync(SESSION_KEY);
 
   const url = `${BASE_URL}/${path}${buildQuery(params)}`;
@@ -241,18 +331,42 @@ async function request(path, { method = 'GET', body, params } = {}) {
       throw error;
     }
 
-    // 5xx is the backend failing, not anything the user did or sent — its raw
-    // message ("Server Error") reads like the user's input was rejected.
-    if (response.status >= 500) {
+    // Too many requests (e.g. asking for a second code within a minute) is
+    // a wait, not an outage — say so, with the wait when the server gives it.
+    if (response.status === 429) {
+      const retryAfter = Number(response.headers?.get?.('Retry-After')) || null;
       const error = new Error(
-        "Megasub's servers aren't responding right now. Please try again in a few minutes."
+        retryAfter
+          ? `Too many attempts. Please wait ${retryAfter} seconds and try again.`
+          : 'Too many attempts. Please wait a minute and try again.'
       );
       error.payload = json;
-      error.isServerError = true;
+      error.isRateLimited = true;
+      error.retryAfter = retryAfter;
       throw error;
     }
 
-    const error = new Error(json.message || 'Something went wrong. Please try again.');
+    // 5xx is the backend failing. Its bare framework text ("Server Error")
+    // reads like the user's input was rejected, so that gets the generic
+    // outage line — but a real explanation the backend sends along with the
+    // 5xx (insufficient balance, wrong network, too many attempts) is what
+    // the user needs to see, and used to be thrown away here.
+    if (response.status >= 500) {
+      const specific = specificServerMessage(json);
+      const error = new Error(
+        specific || "Megasub's servers aren't responding right now. Please try again in a few minutes."
+      );
+      error.payload = json;
+      error.isServerError = !specific;
+      throw error;
+    }
+
+    // A 422 carries the real reason per field in `errors`; the top-level
+    // message is often just "Validation failed" / "The given data was
+    // invalid", which tells the user nothing.
+    const fieldMessage = firstFieldError(json);
+    const message = isGenericValidationMessage(json.message) && fieldMessage ? fieldMessage : json.message;
+    const error = new Error(readableMessage(message) || fieldMessage || 'Something went wrong. Please try again.');
     error.payload = json;
     throw error;
   }

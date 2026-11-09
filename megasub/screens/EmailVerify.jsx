@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { requestEmailVerification, confirmEmailVerification, setSignupStep } from '../lib/api';
+import CodeInput from './home/components/CodeInput';
 
 const COLORS = {
   primary: '#4A55DD',
@@ -38,33 +39,12 @@ const FONTS = {
 // between signup.jsx's handleSignup success and the existing verify.jsx step.
 export default function EmailVerify({ navigate, user }) {
   const insets = useSafeAreaInsets();
-  const inputs = useRef([]);
-  const [code, setCode] = useState(['', '', '', '', '', '']);
+  const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
 
   const userId = user?.id;
   const email = user?.email || '';
-  const otp = code.join('');
-
-  function handleChangeText(text, index) {
-    const next = [...code];
-    const cleanText = text.slice(-1);
-    next[index] = cleanText;
-    setCode(next);
-
-    if (cleanText && index < 5) {
-      inputs.current[index + 1]?.focus();
-    } else if (!cleanText && index > 0) {
-      inputs.current[index - 1]?.focus();
-    }
-  }
-
-  function handleKeyPress(e, index) {
-    if (e.nativeEvent.key === 'Backspace' && !code[index] && index > 0) {
-      inputs.current[index - 1]?.focus();
-    }
-  }
 
   async function handleConfirm() {
     if (otp.length !== 6) {
@@ -117,21 +97,16 @@ export default function EmailVerify({ navigate, user }) {
               : 'Enter the 6-digit code we sent to your email.'}
           </Text>
 
-          <View style={styles.codeRow}>
-            {code.map((digit, index) => (
-              <TextInput
-                key={index}
-                ref={(ref) => (inputs.current[index] = ref)}
-                style={[styles.codeBox, digit ? styles.codeBoxFilled : null]}
-                keyboardType="number-pad"
-                maxLength={1}
-                value={digit}
-                onChangeText={(text) => handleChangeText(text, index)}
-                onKeyPress={(e) => handleKeyPress(e, index)}
-                textAlign="center"
-              />
-            ))}
-          </View>
+          <CodeInput
+            length={6}
+            value={otp}
+            onChange={setOtp}
+            otp
+            autoFocus
+            containerStyle={styles.codeRow}
+            boxStyle={styles.codeBox}
+            filledStyle={styles.codeBoxFilled}
+          />
 
           <TouchableOpacity
             style={[styles.verifyBtn, (loading || otp.length !== 6) && styles.verifyBtnDisabled]}

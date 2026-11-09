@@ -17,7 +17,7 @@ const BRAND = '#4A55DD';
 // via each transaction's own discounted_amount — there's no field to submit
 // a coupon_code into buy_airtime/buy_data. So this is purely an upfront
 // "will I get a discount" check, not something that changes the payload.
-export default function CouponCheck({ userId, colors, productSlug, onApplied }) {
+export default function CouponCheck({ userId, colors, productSlug, networkId, onApplied }) {
   const [code, setCode] = useState('');
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState(null);
@@ -70,6 +70,15 @@ export default function CouponCheck({ userId, colors, productSlug, onApplied }) 
     }
   };
 
+  // A coupon tied to one network (e.g. MTN SME) was listed under every
+  // network, so testers "used" an MTN coupon on a Glo purchase and its
+  // count never moved. Only coupons for the selected network are shown;
+  // coupons with no network attached apply everywhere.
+  const visibleCoupons = activeCoupons.filter((coupon) => {
+    const couponNetworkId = coupon.product_plan_category?.network?.id ?? coupon.product_plan_category?.network_id;
+    return !networkId || couponNetworkId == null || String(couponNetworkId) === String(networkId);
+  });
+
   const handleSelectCoupon = (coupon) => {
     setCode(coupon.code);
     runCheck(coupon.code);
@@ -77,11 +86,11 @@ export default function CouponCheck({ userId, colors, productSlug, onApplied }) 
 
   return (
     <View style={styles.wrap}>
-      {loadingCoupons ? null : activeCoupons.length > 0 ? (
+      {loadingCoupons ? null : visibleCoupons.length > 0 ? (
         <>
           <Text style={[styles.label, { color: colors.textMuted }]}>Active Coupons</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.couponScroll}>
-            {activeCoupons.map((coupon) => {
+            {visibleCoupons.map((coupon) => {
               const networkName = coupon.product_plan_category?.network?.network_name;
               const categoryName = coupon.product_plan_category?.product_plan_category_name;
               const active = code.trim().toUpperCase() === coupon.code.toUpperCase();
@@ -113,7 +122,7 @@ export default function CouponCheck({ userId, colors, productSlug, onApplied }) 
         </>
       ) : null}
 
-      <Text style={[styles.label, { color: colors.textMuted, marginTop: activeCoupons.length > 0 ? 14 : 0 }]}>
+      <Text style={[styles.label, { color: colors.textMuted, marginTop: visibleCoupons.length > 0 ? 14 : 0 }]}>
         Have a coupon code?
       </Text>
       <View style={styles.row}>

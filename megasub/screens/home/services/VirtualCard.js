@@ -41,6 +41,7 @@ import {
   cardTotalUsd,
   requestErrorTitle,
 } from '../../../lib/format';
+import CodeInput from '../components/CodeInput';
 
 const FONTS = {
   regular: 'Montserrat_400Regular',
@@ -142,46 +143,21 @@ function FeeSummary({ amountLabel, amount, product, colors, style }) {
 }
 
 function CustomPinInput({ onPinComplete, colors }) {
-  const [code, setCode] = useState(['', '', '', '']);
-  const inputs = useRef([]);
-
-  const handleChangeText = (text, index) => {
-    const newCode = [...code];
-    const cleanText = text.slice(-1);
-    newCode[index] = cleanText;
-    setCode(newCode);
-    onPinComplete(newCode.join(''));
-    if (cleanText && index < 3) inputs.current[index + 1].focus();
-    else if (!cleanText && index > 0) inputs.current[index - 1].focus();
-  };
-
-  const handleKeyPress = (e, index) => {
-    if (e.nativeEvent.key === 'Backspace' && !code[index] && index > 0) {
-      inputs.current[index - 1].focus();
-    }
-  };
-
+  const [pin, setPinValue] = useState('');
   return (
-    <View style={styles.otpContainer}>
-      {code.map((digit, index) => (
-        <TextInput
-          key={index}
-          ref={(ref) => (inputs.current[index] = ref)}
-          style={[
-            styles.otpInputBox,
-            { color: colors?.text, backgroundColor: colors?.card, borderColor: colors?.border },
-            digit ? styles.otpInputFilled : null,
-          ]}
-          keyboardType="number-pad"
-          maxLength={1}
-          secureTextEntry={true}
-          value={digit}
-          onChangeText={(text) => handleChangeText(text, index)}
-          onKeyPress={(e) => handleKeyPress(e, index)}
-          textAlign="center"
-        />
-      ))}
-    </View>
+    <CodeInput
+      length={4}
+      value={pin}
+      onChange={(next) => {
+        setPinValue(next);
+        onPinComplete(next);
+      }}
+      colors={colors}
+      secure
+      containerStyle={styles.otpContainer}
+      boxStyle={styles.otpInputBox}
+      filledStyle={styles.otpInputFilled}
+    />
   );
 }
 
@@ -658,7 +634,7 @@ export default function VirtualCard({ navigate, user }) {
       else if (alert.requiresPhoneVerification) {
         Alert.alert(alert.title, alert.message, [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Verify Phone', onPress: () => navigate && navigate('verify', user) },
+          { text: 'Verify Phone', onPress: () => navigate && navigate('verify-phone', user) },
         ]);
       } else if (/kyc|verif|identity/i.test(alert.message)) {
         Alert.alert('Verification Needed', alert.message, [
@@ -758,7 +734,7 @@ export default function VirtualCard({ navigate, user }) {
           userId={user?.id}
           product={products.find((p) => p.card_type === selectedCard?.type) || null}
           onChanged={loadCards}
-          onVerifyPhone={() => navigate && navigate('verify', user)}
+          onVerifyPhone={() => navigate && navigate('verify-phone', user)}
         />
       </View>
     );

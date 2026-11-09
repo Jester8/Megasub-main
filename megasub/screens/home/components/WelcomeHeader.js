@@ -36,7 +36,7 @@ function gradientFor(name) {
   return AVATAR_GRADIENTS[hash % AVATAR_GRADIENTS.length];
 }
 
-export default function WelcomeHeader({ userName, userData, onNotifPress, notifCount = 0 }) {
+export default function WelcomeHeader({ userName, userData, onNotifPress, onProfilePress, notifCount = 0 }) {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const { isTablet, content } = useResponsive();
@@ -45,8 +45,9 @@ export default function WelcomeHeader({ userName, userData, onNotifPress, notifC
 
   const displayName = userData?.first_name || userName || userData?.username || 'there';
 
-  // A phone has no hover, so pressing and holding the avatar or name is the
-  // equivalent: it shows "Welcome <name>" for two seconds.
+  // Tapping the avatar or name opens the profile. A phone has no hover, so
+  // pressing and holding is the equivalent: it shows "Welcome <name>" for
+  // two seconds.
   const showTip = () => {
     setTipVisible(true);
     clearTimeout(tipTimer.current);
@@ -59,7 +60,14 @@ export default function WelcomeHeader({ userName, userData, onNotifPress, notifC
     // content inside it is pulled into the tablet column.
     <View style={[styles.container, { paddingTop: insets.top + 8, backgroundColor: colors.card, borderBottomColor: colors.divider }]}>
       <View style={[styles.row, content]}>
-        <Pressable style={styles.left} onLongPress={showTip} delayLongPress={250}>
+        <Pressable
+          style={styles.left}
+          onPress={onProfilePress}
+          onLongPress={showTip}
+          delayLongPress={250}
+          accessibilityRole="button"
+          accessibilityLabel="Open profile"
+        >
           <LinearGradient colors={gradientFor(displayName)} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatar}>
             <Ionicons name="person" size={22} color="#FFFFFF" />
             <View style={[styles.onlineDot, { borderColor: colors.card }]} />

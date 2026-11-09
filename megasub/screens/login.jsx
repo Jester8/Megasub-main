@@ -21,6 +21,8 @@ import { useResponsive } from '../lib/responsive';
 import {
   resetUnauthorizedGuard,
   clearSignupStep,
+  getSignupStep,
+  setSignupStep,
   getAccountSetupStatus,
   saveAccountSetupStatus,
 } from '../lib/api';
@@ -204,6 +206,15 @@ export default function LoginScreen({ navigate }) {
         resetUnauthorizedGuard();
         const userData = await SecureStore.getItemAsync(USER_KEY);
         const user = userData ? JSON.parse(userData) : { first_name: 'Returning User' };
+        // The saved session exists from the moment signup creates the
+        // account, before email/phone verification finish. Backing out of
+        // verification and then using the fingerprint used to skip straight
+        // to Home — an unfinished signup resumes where it stopped instead.
+        const signupStep = await getSignupStep();
+        if (signupStep === 'email-verify' || signupStep === 'verify') {
+          navigate && navigate(signupStep, user);
+          return;
+        }
         navigate && navigate('home', user);
       }
     } catch (err) {
@@ -381,11 +392,31 @@ export default function LoginScreen({ navigate }) {
       await SecureStore.setItemAsync(USER_KEY, JSON.stringify(userData));
       resetUnauthorizedGuard();
 
-      // A successful login with valid credentials is itself proof this
-      // account already exists and finished setup server-side — phone/PIN
-      // collection belongs to the signup flow only. Login must never
-      // re-run it, regardless of what this device does or doesn't
-      // remember locally (fresh install, reinstall, new device, etc.).
+      // An account whose email was never confirmed goes back to that step.
+      // Only an explicit server answer counts: a field that isn't sent at all
+      // says nothing about the account.
+      const emailUnverified =
+        profile.email_verified === false ||
+        profile.email_verified === 0 ||
+        ('email_verified_at' in profile && !profile.email_verified_at);
+      // This device also remembers a signup that was left part-way (backing
+      // out of the verify screens). That memory is only trusted for the same
+      // account that started it.
+      const pendingStep = previousLocal.id === userId ? await getSignupStep() : null;
+      if (emailUnverified || pendingStep === 'email-verify') {
+        await setSignupStep('email-verify');
+        navigate && navigate('email-verify', userData);
+        return;
+      }
+      if (pendingStep === 'verify') {
+        navigate && navigate('verify', userData);
+        return;
+      }
+
+      // Otherwise a successful login is proof this account already finished
+      // setup server-side — phone/PIN collection belongs to the signup flow
+      // only, regardless of what this device does or doesn't remember
+      // locally (fresh install, reinstall, new device, etc.).
       console.log('✅ Login successful! Moving to dashboard home screen.');
       await clearSignupStep();
       navigate && navigate('home', userData);

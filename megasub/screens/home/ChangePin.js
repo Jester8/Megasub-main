@@ -14,6 +14,7 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { forgotPin, resetPin } from '../../lib/api';
+import CodeInput from './components/CodeInput';
 
 const FONTS = {
   regular: 'Montserrat_400Regular',
@@ -25,55 +26,21 @@ const FONTS = {
 
 const BRAND = '#4A55DD';
 
-// Per-digit box input shared by the OTP (length 6) and PIN (length 4)
-// fields below — same auto-advance-forward/backward behavior as every other
-// PIN/OTP input in the app.
-function CodeInput({ length, value, onChange, colors, secure }) {
-  const inputs = useRef([]);
-
-  const handleChangeText = (text, index) => {
-    const digits = value.split('');
-    while (digits.length < length) digits.push('');
-    const cleanText = text.slice(-1);
-    digits[index] = cleanText;
-    const next = digits.join('').slice(0, length);
-    onChange(next);
-
-    if (cleanText && index < length - 1) {
-      inputs.current[index + 1]?.focus();
-    } else if (!cleanText && index > 0) {
-      inputs.current[index - 1]?.focus();
-    }
-  };
-
-  const handleKeyPress = (e, index) => {
-    if (e.nativeEvent.key === 'Backspace' && !value[index] && index > 0) {
-      inputs.current[index - 1]?.focus();
-    }
-  };
-
+// The OTP (length 6) and PIN (length 4) fields below share the app-wide
+// CodeInput, sized down for the 6-digit row.
+function SizedCodeInput({ length, value, onChange, colors, secure }) {
   return (
-    <View style={[styles.codeRow, length > 4 && styles.codeRowSix]}>
-      {Array.from({ length }).map((_, index) => (
-        <TextInput
-          key={index}
-          ref={(ref) => (inputs.current[index] = ref)}
-          style={[
-            styles.codeBox,
-            length > 4 && styles.codeBoxSmall,
-            { borderColor: colors.border, color: colors.text, backgroundColor: colors.card },
-            value[index] ? styles.codeBoxFilled : null,
-          ]}
-          keyboardType="number-pad"
-          maxLength={1}
-          secureTextEntry={secure}
-          value={value[index] || ''}
-          onChangeText={(text) => handleChangeText(text, index)}
-          onKeyPress={(e) => handleKeyPress(e, index)}
-          textAlign="center"
-        />
-      ))}
-    </View>
+    <CodeInput
+      length={length}
+      value={value}
+      onChange={onChange}
+      colors={colors}
+      secure={secure}
+      otp={!secure}
+      containerStyle={[styles.codeRow, length > 4 && styles.codeRowSix]}
+      boxStyle={[styles.codeBox, length > 4 && styles.codeBoxSmall]}
+      filledStyle={styles.codeBoxFilled}
+    />
   );
 }
 
@@ -163,13 +130,13 @@ export default function ChangePin({ navigate, user }) {
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Enter the 6-digit code sent to {email}</Text>
-          <CodeInput length={6} value={otp} onChange={setOtp} colors={colors} />
+          <SizedCodeInput length={6} value={otp} onChange={setOtp} colors={colors} />
 
           <Text style={[styles.sectionLabel, { color: colors.textMuted, marginTop: 28 }]}>New PIN</Text>
-          <CodeInput length={4} value={pin} onChange={setPin} colors={colors} secure />
+          <SizedCodeInput length={4} value={pin} onChange={setPin} colors={colors} secure />
 
           <Text style={[styles.sectionLabel, { color: colors.textMuted, marginTop: 22 }]}>Confirm New PIN</Text>
-          <CodeInput length={4} value={confirmPin} onChange={setConfirmPin} colors={colors} secure />
+          <SizedCodeInput length={4} value={confirmPin} onChange={setConfirmPin} colors={colors} secure />
 
           {confirmPin.length === 4 && !pinsMatch ? (
             <Text style={styles.errorText}>New PIN and confirmation don't match</Text>

@@ -7,6 +7,16 @@ export function sanitizePositiveInt(text) {
   return String(text ?? '').replace(/[^0-9]/g, '');
 }
 
+// The API doesn't publish a minimum airtime amount, and an amount under it
+// comes back only as "Validation failed". ₦50 is the usual provider floor;
+// a plan that does carry its own minimum wins.
+export const DEFAULT_MIN_AIRTIME = 50;
+
+export function minAirtimeAmount(plan) {
+  const fromPlan = Number(plan?.minimum_amount ?? plan?.min_amount);
+  return Number.isFinite(fromPlan) && fromPlan > 0 ? fromPlan : DEFAULT_MIN_AIRTIME;
+}
+
 // Adds thousands separators to a naira amount — figures ≥1,000 were
 // rendering as raw digits across the buy screens (e.g. "₦20000" instead of
 // "₦20,000"), flagged in QA (Screenshot #10).
@@ -124,7 +134,9 @@ export function requestErrorTitle(error) {
 
 export function alertForPurchaseError(error) {
   const message = error?.message || '';
-  const isWrongPin = /incorrect pin|invalid pin|pin mismatch|pins? (do(es)?n'?t|does not) match/i.test(message);
+  // "User pin is incorrect" (scheduled_purchases) puts the words the other
+  // way round and used to fall through to a generic "Could not schedule".
+  const isWrongPin = /incorrect pin|invalid pin|wrong pin|pin (is )?(incorrect|invalid|wrong)|pin mismatch|pins? (do(es)?n'?t|does not) match/i.test(message);
   const requiresPhoneVerification = !!error?.payload?.data?.requires_phone_verification;
 
   if (requiresPhoneVerification) {

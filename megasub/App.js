@@ -73,6 +73,7 @@ import TermsPrivacy from './screens/home/TermsPrivacy';
 import { preloadSlides } from './lib/preloadSlides';
 
 import LogoLoader from './screens/home/components/LogoLoader';
+import { clearSessionFunding } from './lib/fundingSession';
 const USER_KEY = 'megasub_user_data';
 const SESSION_KEY = 'megasub_session_token';
 const ONBOARDING_KEY = 'megasub_onboarding_seen';
@@ -217,6 +218,7 @@ export default function App() {
     // on every single re-login.
     await SecureStore.deleteItemAsync(SESSION_KEY).catch(() => {});
     clearCachedVirtualAccounts();
+    clearSessionFunding();
     // The backend drops this device's push rows when it ends the session
     // (spec §3); only the local "already registered" memo needs clearing so
     // the next login registers again.
@@ -415,6 +417,21 @@ function navigate(s, userData) {
 }
 navigateRef.current = navigate;
 
+  // Returns to the screen before this one, the same way the hardware back
+  // button does. Used by flows that are a detour from a purchase (phone
+  // verification) and must land the user back on it, not on Home.
+  function goBack(updatedUser) {
+    if (updatedUser && typeof updatedUser === 'object') setUser(updatedUser);
+    const history = historyRef.current;
+    if (history.length > 0) {
+      const target = history[history.length - 1];
+      historyRef.current = history.slice(0, -1);
+      setScreen(target);
+      return;
+    }
+    setScreen(user ? 'home' : 'login');
+  }
+
   let content = null;
   if (screen === 'onboarding') content = <OnboardingScreen navigate={navigate} />;
   if (screen === 'signup')     content = <SignupScreen navigate={navigate} />;
@@ -427,6 +444,7 @@ navigateRef.current = navigate;
   );
   if (screen === 'home')       content = <HomeScreen navigate={navigate} user={user} onRefreshWallet={refreshWallet} />;
   if (screen === 'verify')     content = <VerifyScreen navigate={navigate} user={user} />;
+  if (screen === 'verify-phone') content = <VerifyScreen navigate={navigate} user={user} phoneOnly onDone={goBack} />;
   if (screen === 'email-verify') content = <EmailVerifyScreen navigate={navigate} user={user} />;
   if (screen === 'reset')      content = <Resetscreen navigate={navigate} />;
   if (screen === 'airtime')    content = <Airtime navigate={navigate} user={user} />;

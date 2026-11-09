@@ -30,6 +30,7 @@ import {
   resolveGenerationBank,
   clearSignupStep,
   saveAccountSetupStatus,
+  describeApiError,
 } from '../lib/api';
 
 const { width, height } = Dimensions.get('window');
@@ -73,6 +74,7 @@ function FormInput({
   autoCapitalize,
   error,
   maxLength,
+  oneTimeCode = false,
 }) {
   const [focused, setFocused] = useState(false);
   const [shown, setShown] = useState(false);
@@ -97,6 +99,8 @@ function FormInput({
           keyboardType={keyboardType || 'default'}
           autoCapitalize={autoCapitalize || 'none'}
           maxLength={maxLength}
+          textContentType={oneTimeCode ? 'oneTimeCode' : undefined}
+          autoComplete={oneTimeCode ? (Platform.OS === 'android' ? 'sms-otp' : 'one-time-code') : undefined}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
         />
@@ -158,7 +162,10 @@ const inputStyles = StyleSheet.create({
   },
 });
 
-export default function VerifyScreen({ navigate, user }) {
+// phoneOnly: opened from a purchase that hit the unverified-phone limit. The
+// account already has a PIN, so this verifies the number and goes straight
+// back to the purchase (onDone) instead of continuing into PIN setup.
+export default function VerifyScreen({ navigate, user, phoneOnly = false, onDone }) {
   const insets = useSafeAreaInsets();
   const { column, dialog } = useResponsive();
   const userData = user || {};
@@ -181,7 +188,7 @@ export default function VerifyScreen({ navigate, user }) {
   // back by /login or /dashboard) means this account cleared that step
   // already — starting back at 'phone' would force re-entry/re-OTP for
   // no reason. Only PIN is still outstanding in that case.
-  const [step, setStep] = useState(phone_number ? 'pin' : 'phone');
+  const [step, setStep] = useState(phone_number && !phoneOnly ? 'pin' : 'phone');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [userToken, setUserToken] = useState(token);
@@ -252,10 +259,18 @@ export default function VerifyScreen({ navigate, user }) {
     // that overwrites USER_KEY with the other account's data.
     saveAccountSetupStatus(userIdState, { phone_number: phoneNumber.trim() });
 
+    setErrors({});
+    if (phoneOnly) {
+      setModalVisible(false);
+      Alert.alert('Phone Verified', 'Your number is verified. You can go back and complete your purchase.', [
+        { text: 'OK', onPress: () => (onDone ? onDone(updatedUser) : navigate && navigate('home', updatedUser)) },
+      ]);
+      return;
+    }
+
     // Phone is linked, but the account has no transaction PIN yet — that's
     // required before any purchase can go through, so it's the next
     // mandatory step rather than a trip straight to the dashboard.
-    setErrors({});
     setStep('pin');
   }
 
@@ -291,6 +306,14 @@ export default function VerifyScreen({ navigate, user }) {
         json.message || `Enter the code sent to ${phoneNumber.trim()}.`
       );
     } catch (err) {
+      if (err.isRateLimited) {
+        // Asking again within the limit window: show the wait on the resend
+        // button too, not just in the alert.
+        setCountdown(err.retryAfter || 60);
+        setResendDisabled(true);
+        Alert.alert('Please Wait', err.message);
+        return;
+      }
       Alert.alert('Could Not Verify Phone', err.message || 'Please check the number and try again.');
     } finally {
       setLoading(false);
@@ -340,7 +363,7 @@ export default function VerifyScreen({ navigate, user }) {
       const json = await res.json();
 
       if (!res.ok || json.status === false) {
-        Alert.alert('Could Not Set PIN', json.message || 'Please try again.');
+        Alert.alert('Could Not Set PIN', describeApiError(json) || 'Please try again.');
         return;
       }
 
@@ -406,10 +429,6 @@ export default function VerifyScreen({ navigate, user }) {
       }
       console.log('⚠️ Not created at signup, leaving it to login/Top-up:', err.message);
     }
-  }
-
-  function handleDemoFill() {
-    setPhoneNumber('08168509044');
   }
 
   return (
@@ -551,14 +570,6 @@ export default function VerifyScreen({ navigate, user }) {
                         />
 
                         <TouchableOpacity
-                          style={styles.demoFillBtn}
-                          onPress={handleDemoFill}
-                          activeOpacity={0.8}
-                        >
-                          <Text style={styles.demoFillBtnText}>Use demo number: 08168509044</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
                           style={[styles.modalBtn, loading && styles.modalBtnDisabled]}
                           onPress={handleSendOTP}
                           activeOpacity={0.85}
@@ -581,6 +592,7 @@ export default function VerifyScreen({ navigate, user }) {
                             onChangeText={setOtp}
                             keyboardType="number-pad"
                             maxLength={6}
+                            oneTimeCode
                             error={errors.otp}
                           />
                         </View>
@@ -663,7 +675,11 @@ export default function VerifyScreen({ navigate, user }) {
                           setErrors({});
                         } else {
                           setModalVisible(false);
-                          navigate && navigate('login');
+                          if (phoneOnly) {
+                            onDone ? onDone() : navigate && navigate('home');
+                          } else {
+                            navigate && navigate('login');
+                          }
                         }
                       }}
                       activeOpacity={0.8}
@@ -873,16 +889,6 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.medium,
     fontSize: 14,
     color: COLORS.muted,
-  },
-  demoFillBtn: {
-    alignItems: 'center',
-    paddingVertical: 8,
-    marginBottom: 4,
-  },
-  demoFillBtnText: {
-    fontFamily: FONTS.medium,
-    fontSize: 13,
-    color: COLORS.primary,
   },
   resendBtn: {
     alignItems: 'center',

@@ -26,6 +26,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { clearCachedVirtualAccounts, deleteAccount, updateFingerprintOption, fetchKycStatus } from '../../lib/api';
 import { unregisterPushDevice, forgetPushRegistration } from '../../lib/pushNotifications';
 import { useIsFeatureHidden } from '../../lib/featureAvailability';
+import { clearSessionFunding } from '../../lib/fundingSession';
 
 const BIOMETRIC_LABEL = Platform.OS === 'ios' ? 'Face ID' : 'Fingerprint';
 
@@ -196,6 +197,7 @@ export default function Profile({ navigate, user }) {
           // A different person may log in next on this device — the cached
           // account list belongs to whoever just logged out.
           clearCachedVirtualAccounts();
+          clearSessionFunding();
           navigate && navigate('login');
         },
       },
@@ -224,6 +226,7 @@ export default function Profile({ navigate, user }) {
       await SecureStore.deleteItemAsync(SESSION_KEY);
       await SecureStore.deleteItemAsync(USER_KEY);
       clearCachedVirtualAccounts();
+      clearSessionFunding();
       // The backend removes a deleted account's push devices itself.
       forgetPushRegistration();
       setDeleteModalVisible(false);

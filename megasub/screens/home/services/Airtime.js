@@ -28,8 +28,10 @@ import ScheduleSheet from '../components/ScheduleSheet';
 import useSchedulePurchase, { ScheduleLink } from '../components/useSchedulePurchase';
 import PurchaseSuccessModal from '../components/PurchaseSuccessModal';
 import CouponCheck from '../components/CouponCheck';
-import { detectNetworkFromPhone, findNetworkByLabel } from '../../../lib/networkDetect';
-import { formatNaira, alertForPurchaseError, stripNetworkPrefix, sanitizePositiveInt, requestErrorTitle } from '../../../lib/format';
+import { detectNetworkFromPhone, findNetworkByLabel, networkMismatch } from '../../../lib/networkDetect';
+import { formatNaira, minAirtimeAmount, alertForPurchaseError, stripNetworkPrefix, sanitizePositiveInt, requestErrorTitle } from '../../../lib/format';
+import CodeInput from '../components/CodeInput';
+import useStepBack from '../../../lib/useStepBack';
 
 const FONTS = {
   regular: 'Montserrat_400Regular',
@@ -75,56 +77,22 @@ const isValidPhone = (p) => {
   return /^0\d{10}$/.test(cleaned) || /^\d{10}$/.test(cleaned);
 };
 
-// Custom, zero-dependency OTP input inside the same file for robustness on Expo
 function CustomPinInput({ onPinComplete, colors }) {
-  const [code, setCode] = useState(['', '', '', '']);
-  const inputs = useRef([]);
-
-  const handleChangeText = (text, index) => {
-    const newCode = [...code];
-    const cleanText = text.slice(-1);
-    newCode[index] = cleanText;
-    setCode(newCode);
-
-    onPinComplete(newCode.join(''));
-
-    if (cleanText && index < 3) {
-      inputs.current[index + 1].focus();
-    } else if (!cleanText && index > 0) {
-      // Deleting used to just clear the box and leave focus there, so the
-      // very next backspace press had nothing to do — advancing back to the
-      // previous box here means backspacing flows continuously across boxes.
-      inputs.current[index - 1].focus();
-    }
-  };
-
-  const handleKeyPress = (e, index) => {
-    if (e.nativeEvent.key === 'Backspace' && !code[index] && index > 0) {
-      inputs.current[index - 1].focus();
-    }
-  };
-
+  const [pin, setPinValue] = useState('');
   return (
-    <View style={styles.otpContainer}>
-      {code.map((digit, index) => (
-        <TextInput
-          key={index}
-          ref={(ref) => (inputs.current[index] = ref)}
-          style={[
-            styles.otpInputBox,
-            { color: colors?.text, backgroundColor: colors?.card, borderColor: colors?.border },
-            digit ? styles.otpInputFilled : null,
-          ]}
-          keyboardType="number-pad"
-          maxLength={1}
-          secureTextEntry={true}
-          value={digit}
-          onChangeText={(text) => handleChangeText(text, index)}
-          onKeyPress={(e) => handleKeyPress(e, index)}
-          textAlign="center"
-        />
-      ))}
-    </View>
+    <CodeInput
+      length={4}
+      value={pin}
+      onChange={(next) => {
+        setPinValue(next);
+        onPinComplete(next);
+      }}
+      colors={colors}
+      secure
+      containerStyle={styles.otpContainer}
+      boxStyle={styles.otpInputBox}
+      filledStyle={styles.otpInputFilled}
+    />
   );
 }
 
@@ -134,6 +102,10 @@ export default function Airtime({ navigate, user }) {
 
   // Step Workflow Toggle: 'input' (Form screen) or 'confirm' (Pin screen)
   const [step, setStep] = useState('input');
+  useStepBack(() => {
+    if (step === 'confirm') { setStep('input'); return true; }
+    return false;
+  });
 
   // Catalog State — networks come from the shared, disk-persisted cache
   // (warmed right after login by lib/warmup.js), so this screen shows the
@@ -225,8 +197,24 @@ export default function Airtime({ navigate, user }) {
     }
   };
 
+  const mismatchedNetwork = networkMismatch(phone, selectedNetwork);
+
   const handleFormSubmit = () => {
-    if (!selectedNetwork || !selectedCategory || !selectedPlan || !isValidPhone(phone) || !amount) return;
+    if (!selectedNetwork || !selectedCategory || !selectedPlan || !isValidPhone(phone) || !amount || belowMinimum) return;
+    // A recharge on the wrong network fails at the provider (or lands on
+    // the wrong line), so a number that looks like another network is
+    // confirmed first. Ported numbers are real, so it's a warning, not a block.
+    if (mismatchedNetwork) {
+      Alert.alert(
+        'Check the Network',
+        `${phone} looks like a ${mismatchedNetwork} number, but ${selectedNetwork.network_name} is selected. Continue anyway?`,
+        [
+          { text: 'Change Network', style: 'cancel' },
+          { text: 'Continue', onPress: () => setStep('confirm') },
+        ]
+      );
+      return;
+    }
     setStep('confirm');
   };
 
@@ -286,7 +274,7 @@ export default function Airtime({ navigate, user }) {
       } else if (alert.requiresPhoneVerification) {
         Alert.alert(alert.title, alert.message, [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Verify Phone', onPress: () => navigate && navigate('verify', user) },
+          { text: 'Verify Phone', onPress: () => navigate && navigate('verify-phone', user) },
         ]);
       } else {
         Alert.alert(alert.title, alert.message);
@@ -296,7 +284,9 @@ export default function Airtime({ navigate, user }) {
     }
   };
 
-  const canContinue = !!(selectedNetwork && selectedCategory && selectedPlan && isValidPhone(phone) && Number(amount) > 0);
+  const minAmount = minAirtimeAmount(selectedPlan);
+  const belowMinimum = !!amount && Number(amount) < minAmount;
+  const canContinue = !!(selectedNetwork && selectedCategory && selectedPlan && isValidPhone(phone) && Number(amount) > 0 && !belowMinimum);
 
   return (
     // iOS number pads have no return/Done key, so the PIN keypad on the
@@ -439,8 +429,13 @@ export default function Airtime({ navigate, user }) {
               <Feather name="user-plus" size={18} color={BRAND} />
             </TouchableOpacity>
           </View>
+          {mismatchedNetwork ? (
+            <Text style={styles.networkWarnText}>
+              This looks like a {mismatchedNetwork} number, but {selectedNetwork?.network_name} is selected.
+            </Text>
+          ) : null}
 
-          <CouponCheck userId={user?.id} colors={colors} productSlug="airtime" onApplied={setAppliedCoupon} />
+          <CouponCheck userId={user?.id} colors={colors} productSlug="airtime" networkId={selectedNetwork?.id} onApplied={setAppliedCoupon} />
 
           <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Amount</Text>
           <View style={[styles.inputCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -451,10 +446,15 @@ export default function Airtime({ navigate, user }) {
               placeholder="Enter amount"
               placeholderTextColor={colors.textFaint}
               keyboardType="number-pad"
-              value={amount}
+              // Shown with thousands separators (105,000); the state keeps
+              // plain digits, since sanitizePositiveInt strips the commas.
+              value={amount ? formatNaira(amount) : ''}
               onChangeText={(text) => setAmount(sanitizePositiveInt(text))}
             />
           </View>
+          <Text style={[styles.minAmountText, { color: belowMinimum ? '#D94F4F' : colors.textFaint }]}>
+            Minimum ₦{formatNaira(minAmount)}{belowMinimum ? ' — enter a higher amount to continue.' : ''}
+          </Text>
 
           <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Quick Amount</Text>
           <PlanGrid
@@ -554,6 +554,9 @@ export default function Airtime({ navigate, user }) {
         </View>
       )}
       <ScheduleSheet
+        // The schedule is authorised with the PIN typed on this confirm
+        // screen; testers read the missing PIN box here as "no PIN asked".
+        note="Authorised with the transaction PIN you just entered."
         visible={schedule.visible}
         busy={schedule.busy}
         colors={colors}
@@ -584,6 +587,8 @@ export default function Airtime({ navigate, user }) {
 }
 
 const styles = StyleSheet.create({
+  minAmountText: { fontFamily: FONTS.regular, fontSize: 11.5, marginTop: 6, marginLeft: 4 },
+  networkWarnText: { fontFamily: FONTS.medium, fontSize: 12, color: '#B45309', marginTop: 6, marginLeft: 4 },
   screen: { flex: 1, backgroundColor: '#F7F8FC' },
   header: {
     flexDirection: 'row',

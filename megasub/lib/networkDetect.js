@@ -18,13 +18,27 @@ const PREFIX_NETWORK = {
   '0909': '9MOBILE',
 };
 
-// Returns 'MTN' | 'AIRTEL' | 'GLO' | '9MOBILE' | null for an 11-digit
-// leading-zero Nigerian number; null for anything shorter/unrecognized —
-// callers should leave the current selection alone in that case.
+// Returns 'MTN' | 'AIRTEL' | 'GLO' | '9MOBILE' | null; null for anything
+// shorter/unrecognized — callers should leave the current selection alone in
+// that case. The buy screens take the number after a fixed +234, so it
+// usually arrives without its leading 0 ("7057545653"); that used to match
+// nothing, so a Glo number could go out as MTN with no warning. 234/+234
+// forms are accepted too.
 export function detectNetworkFromPhone(phone) {
-  const cleaned = String(phone || '').replace(/\s+/g, '');
+  let cleaned = String(phone || '').replace(/\D/g, '');
+  if (cleaned.startsWith('234')) cleaned = `0${cleaned.slice(3)}`;
+  else if (cleaned && !cleaned.startsWith('0')) cleaned = `0${cleaned}`;
   if (cleaned.length < 4) return null;
   return PREFIX_NETWORK[cleaned.slice(0, 4)] || null;
+}
+
+// The detected network when it disagrees with the selected one, else null.
+// Numbers can be ported between networks, so callers warn rather than block.
+export function networkMismatch(phone, selectedNetwork) {
+  const detected = detectNetworkFromPhone(phone);
+  const selected = String(selectedNetwork?.network_name || '').toUpperCase();
+  if (!detected || !selected || selected === detected) return null;
+  return detected;
 }
 
 // Matches a detected label (e.g. 'MTN') against the API's own networks list

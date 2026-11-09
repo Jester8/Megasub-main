@@ -58,6 +58,11 @@ export async function signInWithGoogle({ deviceName, referralCode } = {}) {
   ensureConfigured();
 
   await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+  // Google reuses the last account it signed in with and skips the chooser,
+  // so a phone with several accounts was always logged into the same one.
+  // Clearing that local choice first makes the account picker show every
+  // time. It only signs out of this app's Google link, not the device.
+  await GoogleSignin.signOut().catch(() => {});
   const signInResult = await GoogleSignin.signIn();
 
   // v13+ of this library wraps the payload as { type: 'success', data } and
