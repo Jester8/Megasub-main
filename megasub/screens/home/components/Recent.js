@@ -9,7 +9,14 @@ import { Ionicons, Feather } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useResponsive } from '../../../lib/responsive';
 import { useTransactionsQuery } from '../../../lib/queries';
-import { CATEGORY_STYLE, DEFAULT_STYLE, formatDateShort, toDateParam } from '../../../lib/transactionMeta';
+import {
+  CATEGORY_STYLE,
+  DEFAULT_STYLE,
+  formatDateShort,
+  isWalletFundingTransaction,
+  transactionAmount,
+  toDateParam,
+} from '../../../lib/transactionMeta';
 import ReceiptModal from './ReceiptModal';
 
 import LogoLoader from './LogoLoader';
@@ -26,17 +33,22 @@ const WINDOW_DAYS = 62;
 
 function TransactionItem({ tx, colors, onPress, isTablet }) {
   const visual = CATEGORY_STYLE[tx.transaction_category] || DEFAULT_STYLE;
-  const amount = Number(tx.amount || tx.discounted_amount || 0);
+  const isFunding = isWalletFundingTransaction(tx);
+  const amount = transactionAmount(tx);
   return (
     <TouchableOpacity style={styles.txItem} activeOpacity={0.75} onPress={onPress}>
       <View style={[styles.iconWrap, isTablet && styles.iconWrapTablet, { backgroundColor: visual.bg }]}>
         <Ionicons name={visual.icon} size={isTablet ? 18 : 20} color={visual.color} />
       </View>
       <View style={styles.txInfo}>
-        <Text style={[styles.txTitle, { color: colors.text }]} numberOfLines={1}>{tx.description || 'Transaction'}</Text>
+        <Text style={[styles.txTitle, { color: colors.text }]} numberOfLines={1}>
+          {tx.description || (isFunding ? 'Wallet Funded' : 'Transaction')}
+        </Text>
         <Text style={[styles.txSubtitle, { color: colors.textMuted }]}>{formatDateShort(tx.created_at)}</Text>
       </View>
-      <Text style={[styles.txAmount, { color: colors.text }]}>₦{amount.toLocaleString()}</Text>
+      <Text style={[styles.txAmount, { color: isFunding ? '#16A34A' : colors.text }]}>
+        {isFunding ? '+' : ''}₦{amount.toLocaleString()}
+      </Text>
     </TouchableOpacity>
   );
 }

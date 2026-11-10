@@ -234,7 +234,7 @@ export default function Airtime({ navigate, user }) {
         product_plan_id: selectedPlan.product_plan_id,
         amount: Number(amount),
         actual_amount: Number(amount),
-        validatephonenetwork: 0,
+        validatephonenetwork: 1,
       };
     },
   });
@@ -261,6 +261,7 @@ export default function Airtime({ navigate, user }) {
         actual_amount: String(amount),
         wallet_category: 'main_wallet',
         validatephonenetwork: 1,
+        ...(appliedCoupon?.code ? { coupon_code: appliedCoupon.code } : {}),
       };
 
       const json = await buyAirtime(payload);
@@ -333,13 +334,13 @@ export default function Airtime({ navigate, user }) {
                 { label: 'Network', value: selectedNetwork?.network_name, logo: NETWORK_LOGOS[selectedNetwork?.network_name?.toUpperCase()] },
                 { label: 'Recipient', value: phone },
                 { label: 'Recharge Type', value: selectedCategory?.product_plan_category_name },
-                ...(appliedCoupon
-                  ? [{ label: `Coupon (${appliedCoupon.code})`, value: `-₦${formatNaira(appliedCoupon.amount)}` }]
+                ...(appliedCoupon && bonus > 0
+                  ? [{ label: `Coupon (${appliedCoupon.code})`, value: `-₦${formatNaira(bonus)}` }]
                   : []),
                 ...(bonus > 0
                   ? [
                       { label: 'Amount Paid', value: `₦${charged.toLocaleString()}` },
-                      { label: 'Bonus', value: `₦${bonus.toLocaleString()}` },
+                      ...(!appliedCoupon ? [{ label: 'Bonus', value: `₦${bonus.toLocaleString()}` }] : []),
                     ]
                   : []),
               ].filter((d) => d.value)}
@@ -435,7 +436,14 @@ export default function Airtime({ navigate, user }) {
             </Text>
           ) : null}
 
-          <CouponCheck userId={user?.id} colors={colors} productSlug="airtime" networkId={selectedNetwork?.id} onApplied={setAppliedCoupon} />
+          <CouponCheck
+            userId={user?.id}
+            colors={colors}
+            productSlug="airtime"
+            networkId={selectedNetwork?.id}
+            productPlanId={selectedPlan?.product_plan_id}
+            onApplied={setAppliedCoupon}
+          />
 
           <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Amount</Text>
           <View style={[styles.inputCard, { backgroundColor: colors.card, borderColor: colors.border }]}>

@@ -22,7 +22,15 @@ import { getSessionFunding, setSessionFunding, isFundingSuccessful } from '../..
 import CodeInput from './components/CodeInput';
 import { useBalanceHidden } from '../../lib/balanceVisibility';
 import { detectTransactionLogo } from '../../lib/logos';
-import { CATEGORY_STYLE, DEFAULT_STYLE, STATUS_LABELS, formatDateShort, toDateParam } from '../../lib/transactionMeta';
+import {
+  CATEGORY_STYLE,
+  DEFAULT_STYLE,
+  STATUS_LABELS,
+  formatDateShort,
+  isWalletFundingTransaction,
+  transactionAmount,
+  toDateParam,
+} from '../../lib/transactionMeta';
 
 import LogoLoader from './components/LogoLoader';
 import { SHOW_WITHDRAW } from '../../lib/featureAvailability';
@@ -65,9 +73,13 @@ function FundingItem({ funding, colors }) {
 
 function ActivityItem({ tx, colors, onPress }) {
   const visual = CATEGORY_STYLE[tx.transaction_category] || DEFAULT_STYLE;
+  const isFunding = isWalletFundingTransaction(tx);
   const statusLabel = STATUS_LABELS[tx.status] || 'Unknown';
-  const amount = Number(tx.amount || tx.discounted_amount || 0);
+  const amount = transactionAmount(tx);
   const logo = detectTransactionLogo(tx);
+  const bank = tx.bank_name || tx.bank;
+  const reference = tx.reference || tx.transaction_reference;
+  const subtitle = [formatDateShort(tx.created_at), bank, reference].filter(Boolean).join(' · ');
   return (
     <TouchableOpacity style={styles.txItem} activeOpacity={0.75} onPress={onPress}>
       <View style={[styles.txIconWrap, { backgroundColor: visual.bg }]}>
@@ -78,11 +90,15 @@ function ActivityItem({ tx, colors, onPress }) {
         )}
       </View>
       <View style={styles.txInfo}>
-        <Text style={[styles.txTitle, { color: colors.text }]} numberOfLines={1}>{tx.description || 'Transaction'}</Text>
-        <Text style={[styles.txSubtitle, { color: colors.textMuted }]}>{formatDateShort(tx.created_at)}</Text>
+        <Text style={[styles.txTitle, { color: colors.text }]} numberOfLines={1}>
+          {tx.description || (isFunding ? 'Wallet Funded' : 'Transaction')}
+        </Text>
+        <Text style={[styles.txSubtitle, { color: colors.textMuted }]} numberOfLines={1}>{subtitle}</Text>
       </View>
       <View style={styles.txRight}>
-        <Text style={[styles.txAmount, { color: colors.text }]}>₦{amount.toLocaleString()}</Text>
+        <Text style={[styles.txAmount, { color: isFunding ? '#16A34A' : colors.text }]}>
+          {isFunding ? '+' : ''}₦{amount.toLocaleString()}
+        </Text>
         <Text style={[styles.txStatus, { color: colors.textFaint }]}>{statusLabel}</Text>
       </View>
     </TouchableOpacity>
@@ -122,10 +138,28 @@ export default function Wallet({ navigate, user }) {
     }
   };
 
-  // Purchases and funding credits in one list, newest first.
+  const feedFunding = transactions.filter(isWalletFundingTransaction);
+  const feedFundingKeys = new Set(
+    feedFunding.flatMap((item) => [
+      item.id != null ? `id:${item.id}` : null,
+      (item.reference || item.transaction_reference)
+        ? `ref:${String(item.reference || item.transaction_reference).trim().toLowerCase()}`
+        : null,
+    ].filter(Boolean))
+  );
+  const legacyFunding = (funding || []).filter((item) => {
+    const idKey = item.id != null ? `id:${item.id}` : null;
+    const reference = item.reference || item.transaction_reference || item.reference_number;
+    const referenceKey = reference ? `ref:${String(reference).trim().toLowerCase()}` : null;
+    return ![idKey, referenceKey].filter(Boolean).some((key) => feedFundingKeys.has(key));
+  });
+
+  // Purchases and funding credits in one list, newest first. New funding rows
+  // arrive through fetch_transactions without a PIN; the separate PIN route
+  // remains only as a compatibility fallback while the backend is upgraded.
   const activity = [
     ...transactions.map((tx) => ({ kind: 'tx', key: `tx-${tx.id}`, at: tx.created_at, tx })),
-    ...(funding || []).map((f) => ({ kind: 'funding', key: `fund-${f.id}`, at: f.created_at, funding: f })),
+    ...legacyFunding.map((f, index) => ({ kind: 'funding', key: `fund-${f.id || f.reference || index}`, at: f.created_at, funding: f })),
   ]
     .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
     .slice(0, VISIBLE_COUNT);
@@ -262,7 +296,7 @@ export default function Wallet({ navigate, user }) {
           )}
         </View>
 
-        {!funding && (
+        {!funding && feedFunding.length === 0 && (
           <TouchableOpacity
             style={[styles.fundingRow, { backgroundColor: colors.card }]}
             activeOpacity={0.8}

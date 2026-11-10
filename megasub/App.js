@@ -466,7 +466,7 @@ navigateRef.current = navigate;
   if (screen === 'profile')    content = <Profile navigate={navigate} user={user} />;
   if (screen === 'change-pin')      content = <ChangePin navigate={navigate} user={user} />;
   if (screen === 'change-password') content = <ChangePassword navigate={navigate} user={user} />;
-  if (screen === 'kyc')             content = <BvnKYC navigate={navigate} user={user} />;
+  if (screen === 'kyc')             content = <BvnKYC navigate={navigate} onBack={goBack} user={user} />;
   if (screen === 'card-kyc')        content = <CardKYC navigate={navigate} user={user} />;
   if (screen === 'bulk-data')       content = <BulkData navigate={navigate} user={user} />;
   if (screen === 'refer-earn')      content = <ReferEarn navigate={navigate} user={user} />;

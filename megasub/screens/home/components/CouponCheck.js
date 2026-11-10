@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { checkCouponQualification, fetchActiveCoupons } from '../../../lib/api';
@@ -12,24 +12,20 @@ const FONTS = {
 
 const BRAND = '#4A55DD';
 
-// The check-qualification endpoint takes only user_id + coupon_code (no
-// network/plan), and a qualifying coupon's discount is reflected server-side
-// via each transaction's own discounted_amount — there's no field to submit
-// a coupon_code into buy_airtime/buy_data. So this is purely an upfront
-// "will I get a discount" check, not something that changes the payload.
-export default function CouponCheck({ userId, colors, productSlug, networkId, onApplied }) {
+export default function CouponCheck({ userId, colors, productSlug, networkId, productPlanId, onApplied }) {
   const [code, setCode] = useState('');
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState(null);
 
   const [activeCoupons, setActiveCoupons] = useState([]);
   const [loadingCoupons, setLoadingCoupons] = useState(true);
+  const checkSequence = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const json = await fetchActiveCoupons(userId);
+        const json = await fetchActiveCoupons(userId, networkId);
         if (cancelled) return;
         const list = (json.data || []).filter((c) => c.product_slug === productSlug && c.status === '1');
         setActiveCoupons(list);
@@ -42,17 +38,39 @@ export default function CouponCheck({ userId, colors, productSlug, networkId, on
     return () => {
       cancelled = true;
     };
-  }, [userId, productSlug]);
+  }, [userId, productSlug, networkId]);
+
+  useEffect(() => {
+    checkSequence.current += 1;
+    setChecking(false);
+    setResult(null);
+    onApplied && onApplied(null);
+  }, [networkId, productPlanId]);
 
   const runCheck = async (couponCode) => {
     const trimmed = couponCode.trim();
     if (!trimmed) return;
 
+    const sequence = ++checkSequence.current;
+
+    if (!networkId || !productPlanId) {
+      setChecking(false);
+      setResult({ qualified: false, message: 'Choose a network and plan before checking this coupon.' });
+      onApplied && onApplied(null);
+      return;
+    }
+
     setChecking(true);
     setResult(null);
     onApplied && onApplied(null);
     try {
-      const json = await checkCouponQualification({ userId, couponCode: trimmed });
+      const json = await checkCouponQualification({
+        userId,
+        couponCode: trimmed,
+        networkId,
+        productPlanId,
+      });
+      if (sequence !== checkSequence.current) return;
       const data = json.data || {};
       const qualified = !!data.qualified;
       setResult({
@@ -64,9 +82,11 @@ export default function CouponCheck({ userId, colors, productSlug, networkId, on
         onApplied && onApplied({ code: trimmed, amount: Number(data.coupon_amount) || 0 });
       }
     } catch (error) {
-      setResult({ qualified: false, message: error.message || 'Could not check this code right now.' });
+      if (sequence === checkSequence.current) {
+        setResult({ qualified: false, message: error.message || 'Could not check this code right now.' });
+      }
     } finally {
-      setChecking(false);
+      if (sequence === checkSequence.current) setChecking(false);
     }
   };
 
@@ -76,7 +96,10 @@ export default function CouponCheck({ userId, colors, productSlug, networkId, on
   // coupons with no network attached apply everywhere.
   const visibleCoupons = activeCoupons.filter((coupon) => {
     const couponNetworkId = coupon.product_plan_category?.network?.id ?? coupon.product_plan_category?.network_id;
-    return !networkId || couponNetworkId == null || String(couponNetworkId) === String(networkId);
+    const couponPlanId = coupon.product_plan_id ?? coupon.product_plan?.id;
+    const matchesNetwork = !networkId || couponNetworkId == null || String(couponNetworkId) === String(networkId);
+    const matchesPlan = !productPlanId || couponPlanId == null || String(couponPlanId) === String(productPlanId);
+    return matchesNetwork && matchesPlan;
   });
 
   const handleSelectCoupon = (coupon) => {
@@ -134,6 +157,8 @@ export default function CouponCheck({ userId, colors, productSlug, networkId, on
             autoCapitalize="characters"
             value={code}
             onChangeText={(text) => {
+              checkSequence.current += 1;
+              setChecking(false);
               setCode(text);
               setResult(null);
               onApplied && onApplied(null);

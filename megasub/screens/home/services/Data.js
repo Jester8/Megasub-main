@@ -119,6 +119,7 @@ export default function Data({ navigate, user }) {
   const [pinKey, setPinKey] = useState(0);
   const [wrongPinVisible, setWrongPinVisible] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [purchaseTx, setPurchaseTx] = useState(null);
 
   useEffect(() => {
     if (selectedNetwork) loadCategories(selectedNetwork.id);
@@ -229,9 +230,11 @@ export default function Data({ navigate, user }) {
         pin,
         wallet_category: 'main_wallet',
         validatephonenetwork: 1,
+        ...(appliedCoupon?.code ? { coupon_code: appliedCoupon.code } : {}),
       };
 
-      await buyData(payload);
+      const json = await buyData(payload);
+      setPurchaseTx(json?.data || null);
       setStep('success');
     } catch (error) {
       const alert = alertForPurchaseError(error);
@@ -278,21 +281,29 @@ export default function Data({ navigate, user }) {
       )}
 
       {step === 'success' ? (
-        <SuccessView
-          title="Data Purchase Successful!"
-          subtitle={`Your ${selectedPlan?.product_plan_name || 'data'} plan on ${selectedNetwork?.network_name || ''} was activated.`}
-          amount={selectedPlan?.selling_price}
-          details={[
-            { label: 'Network', value: selectedNetwork?.network_name, logo: NETWORK_LOGOS[selectedNetwork?.network_name?.toUpperCase()] },
-            { label: 'Recipient', value: phone },
-            { label: 'Plan', value: selectedPlan?.product_plan_name },
-            ...(appliedCoupon
-              ? [{ label: `Coupon (${appliedCoupon.code})`, value: `-₦${formatNaira(appliedCoupon.amount)}` }]
-              : []),
-          ].filter((d) => d.value)}
-          onDone={() => navigate && navigate('home')}
-          colors={colors}
-        />
+        (() => {
+          const faceValue = Number(purchaseTx?.amount ?? selectedPlan?.selling_price) || Number(selectedPlan?.selling_price || 0);
+          const charged = Number(purchaseTx?.discounted_amount ?? faceValue);
+          const discount = faceValue > charged ? faceValue - charged : 0;
+          return (
+            <SuccessView
+              title="Data Purchase Successful!"
+              subtitle={`Your ${selectedPlan?.product_plan_name || 'data'} plan on ${selectedNetwork?.network_name || ''} was activated.`}
+              amount={faceValue}
+              details={[
+                { label: 'Network', value: selectedNetwork?.network_name, logo: NETWORK_LOGOS[selectedNetwork?.network_name?.toUpperCase()] },
+                { label: 'Recipient', value: phone },
+                { label: 'Plan', value: selectedPlan?.product_plan_name },
+                ...(appliedCoupon && discount > 0
+                  ? [{ label: `Coupon (${appliedCoupon.code})`, value: `-₦${formatNaira(discount)}` }]
+                  : []),
+                ...(discount > 0 ? [{ label: 'Amount Paid', value: `₦${formatNaira(charged)}` }] : []),
+              ].filter((d) => d.value)}
+              onDone={() => navigate && navigate('home')}
+              colors={colors}
+            />
+          );
+        })()
       ) : step === 'input' ? (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag">
           <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Select Network</Text>
@@ -360,8 +371,6 @@ export default function Data({ navigate, user }) {
             </Text>
           ) : null}
 
-          <CouponCheck userId={user?.id} colors={colors} productSlug="data" networkId={selectedNetwork?.id} onApplied={setAppliedCoupon} />
-
           {selectedNetwork ? (
             <>
               <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Data Type</Text>
@@ -399,6 +408,17 @@ export default function Data({ navigate, user }) {
                     />
                   )}
                 </>
+              ) : null}
+
+              {selectedPlan ? (
+                <CouponCheck
+                  userId={user?.id}
+                  colors={colors}
+                  productSlug="data"
+                  networkId={selectedNetwork.id}
+                  productPlanId={selectedPlan.product_plan_id}
+                  onApplied={setAppliedCoupon}
+                />
               ) : null}
             </>
           ) : (

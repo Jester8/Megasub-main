@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import * as Crypto from 'expo-crypto';
 import { alertForPurchaseError } from './format';
 import { reportPathAvailability } from './featureAvailability';
 
@@ -213,20 +214,70 @@ function firstFieldError(json) {
 // duplicate check — this only covers taps on this device.
 const MONEY_PATH = /^(buy_|scheduled_purchases|fund_card|create_card)/;
 const inFlight = new Map();
+const retryReferences = new Map();
+const RETRY_REFERENCE_TTL_MS = 2 * 60 * 1000;
 
 function request(path, options = {}) {
   const { method = 'GET', body } = options;
   const isMoney = method === 'POST' && MONEY_PATH.test(path) && !(typeof FormData !== 'undefined' && body instanceof FormData);
   if (!isMoney) return sendRequest(path, options);
 
-  let key;
-  try {
-    key = `${path}:${JSON.stringify(body || {})}`;
-  } catch {
-    return sendRequest(path, options);
+  // Card creation keeps its original local double-tap guard. The backend
+  // contract specifically requires client_reference on purchases, schedules,
+  // and card funding; don't send that new field to unrelated card creation.
+  if (!/^(buy_|scheduled_purchases|fund_card)/.test(path)) {
+    let key;
+    try {
+      key = `${path}:${JSON.stringify(body || {})}`;
+    } catch {
+      return sendRequest(path, options);
+    }
+    if (inFlight.has(key)) return inFlight.get(key);
+    const promise = sendRequest(path, options).finally(() => inFlight.delete(key));
+    inFlight.set(key, promise);
+    return promise;
   }
+
+  let intentKey;
+  try {
+    const intentBody = { ...(body || {}) };
+    delete intentBody.client_reference;
+    intentKey = `${path}:${JSON.stringify(intentBody)}`;
+  } catch {
+    return sendRequest(path, {
+      ...options,
+      body: { ...(body || {}), client_reference: body?.client_reference || Crypto.randomUUID() },
+    });
+  }
+
+  const explicitReference = body?.client_reference;
+  const key = `${intentKey}:${explicitReference || 'generated'}`;
   if (inFlight.has(key)) return inFlight.get(key);
-  const promise = sendRequest(path, options).finally(() => inFlight.delete(key));
+
+  const cached = retryReferences.get(intentKey);
+  if (cached && cached.expiresAt <= Date.now()) retryReferences.delete(intentKey);
+  const reference = explicitReference || retryReferences.get(intentKey)?.reference || Crypto.randomUUID();
+  if (!explicitReference) {
+    retryReferences.set(intentKey, { reference, expiresAt: Date.now() + RETRY_REFERENCE_TTL_MS });
+  }
+
+  const requestBody = { ...(body || {}), client_reference: reference };
+  const promise = sendRequest(path, { ...options, body: requestBody })
+    .then((result) => {
+      if (!explicitReference) retryReferences.delete(intentKey);
+      return result;
+    })
+    .catch((error) => {
+      // A lost response or server error can happen after a provider has
+      // processed the purchase. Reuse this UUID if the user retries the same
+      // purchase during the short retry window; definite rejections get a new
+      // reference on the next attempt.
+      if (!explicitReference && !error?.isNetworkError && !(error?.httpStatus >= 500)) {
+        retryReferences.delete(intentKey);
+      }
+      throw error;
+    })
+    .finally(() => inFlight.delete(key));
   inFlight.set(key, promise);
   return promise;
 }
@@ -357,6 +408,7 @@ async function sendRequest(path, { method = 'GET', body, params } = {}) {
         specific || "Megasub's servers aren't responding right now. Please try again in a few minutes."
       );
       error.payload = json;
+      error.httpStatus = response.status;
       error.isServerError = !specific;
       throw error;
     }
@@ -368,6 +420,7 @@ async function sendRequest(path, { method = 'GET', body, params } = {}) {
     const message = isGenericValidationMessage(json.message) && fieldMessage ? fieldMessage : json.message;
     const error = new Error(readableMessage(message) || fieldMessage || 'Something went wrong. Please try again.');
     error.payload = json;
+    error.httpStatus = response.status;
     throw error;
   }
 
@@ -773,16 +826,16 @@ export const confirmPhoneVerification = ({ userId, otp }) =>
 // confirm_phone_verification answers status:true even for a code it did not
 // accept — the real result is data.verified (documented alongside pinId,
 // msisdn and attemptsRemaining). Treating "no exception" as verified is how a
-// wrong code slipped through and left the account unlinked, so an explicit
-// false counts as a failure.
+// wrong code slipped through and left the account unlinked, so the API must
+// explicitly return true before signup can continue.
 export async function confirmPhoneVerified({ userId, otp }) {
   const json = await confirmPhoneVerification({ userId, otp });
   console.log('🔐 confirm_phone_verification:', JSON.stringify(json));
 
   const verified = json?.data?.verified;
-  // Absent means this deployment doesn't report the flag; only an explicit
-  // false is treated as a rejection.
-  return verified !== false;
+  // Verification only succeeds when the API explicitly confirms it. A
+  // missing or malformed flag must never let signup continue.
+  return verified === true;
 }
 
 // Links a phone number to the account. phone_verification is the call that
@@ -914,11 +967,19 @@ export const updateReferralCode = async ({ referralCode }) => {
 };
 
 // ── Coupons ─────────────────────────────────────────────────────────
-export const fetchActiveCoupons = (userId) =>
-  request('coupons/active', { params: { user_id: userId } });
+export const fetchActiveCoupons = (userId, networkId) =>
+  request('coupons/active', { params: { user_id: userId, network_id: networkId } });
 
-export const checkCouponQualification = ({ userId, couponCode }) =>
-  request('coupons/check-qualification', { method: 'POST', body: { user_id: userId, coupon_code: couponCode } });
+export const checkCouponQualification = ({ userId, couponCode, networkId, productPlanId }) =>
+  request('coupons/check-qualification', {
+    method: 'POST',
+    body: {
+      user_id: userId,
+      coupon_code: couponCode,
+      network_id: networkId,
+      product_plan_id: productPlanId,
+    },
+  });
 
 // History of wallet-funding credits (bank transfers into the virtual
 // account) — a separate list from fetch_transactions, and also requires

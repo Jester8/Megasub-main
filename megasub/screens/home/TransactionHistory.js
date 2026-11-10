@@ -33,6 +33,8 @@ import {
   CATEGORY_OPTIONS,
   STATUS_OPTIONS,
   formatDate,
+  isWalletFundingTransaction,
+  transactionAmount,
   toDateParam,
 } from '../../lib/transactionMeta';
 import { requestErrorTitle } from '../../lib/format';
@@ -102,6 +104,7 @@ const CARD_TEXT_MUTED = 'rgba(11,13,26,0.55)';
 
 function TransactionRow({ tx, colors, onPress }) {
   const visual = CATEGORY_STYLE[tx.transaction_category] || DEFAULT_STYLE;
+  const isFunding = isWalletFundingTransaction(tx);
   const statusLabel = STATUS_LABELS[tx.status] || 'Unknown';
   const statusColor = STATUS_COLOR[tx.status] || colors.textFaint;
   // Card background reflects status (green/red/yellow), not the service —
@@ -118,11 +121,13 @@ function TransactionRow({ tx, colors, onPress }) {
         )}
       </View>
       <View style={styles.txInfo}>
-        <Text style={[styles.txTitle, { color: CARD_TEXT }]}>{tx.description || 'Transaction'}</Text>
+        <Text style={[styles.txTitle, { color: CARD_TEXT }]}>{tx.description || (isFunding ? 'Wallet Funded' : 'Transaction')}</Text>
         <Text style={[styles.txSubtitle, { color: CARD_TEXT_MUTED }]}>{formatDate(tx.created_at)}</Text>
       </View>
       <View style={styles.txRight}>
-        <Text style={[styles.txAmount, { color: CARD_TEXT }]}>₦{Number(tx.amount || tx.discounted_amount || 0).toLocaleString()}</Text>
+        <Text style={[styles.txAmount, { color: isFunding ? '#16A34A' : CARD_TEXT }]}>
+          {isFunding ? '+' : ''}₦{transactionAmount(tx).toLocaleString()}
+        </Text>
         <Text style={[styles.txStatus, { color: statusColor }]}>{statusLabel}</Text>
       </View>
     </TouchableOpacity>

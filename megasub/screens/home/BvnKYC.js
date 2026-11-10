@@ -73,7 +73,7 @@ function Field({ label, value, onChangeText, error, colors, ...inputProps }) {
 // Standalone BVN verification (SecureWave), separate from the card-issuing
 // identity form in CardKYC.js. The backend calls the provider only for a user
 // who isn't verified yet and answers from its saved result afterwards.
-export default function BvnKYC({ navigate, user }) {
+export default function BvnKYC({ navigate, onBack, user }) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
 
@@ -197,7 +197,7 @@ export default function BvnKYC({ navigate, user }) {
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity
           style={[styles.backBtn, { backgroundColor: colors.card }]}
-          onPress={() => navigate && navigate('home')}
+          onPress={() => (onBack ? onBack() : navigate && navigate('home'))}
           activeOpacity={0.7}
         >
           <Feather name="arrow-left" size={20} color={colors.text} />
@@ -245,10 +245,7 @@ export default function BvnKYC({ navigate, user }) {
               </View>
             ) : null}
 
-            {/* Verified details card (name, photo, contact) is switched off until the
-                backend returns those fields from fetch_kyc_status. Re-enable by
-                restoring this block; the styles and extractBvnProfile are kept.
-
+            {verified && profile ? (
               <View style={[styles.detailsCard, { backgroundColor: colors.card, borderColor: colors.border }, result ? { marginTop: 12 } : null]}>
                 <View style={styles.detailsTop}>
                   <View style={styles.photoWrap}>
@@ -270,7 +267,6 @@ export default function BvnKYC({ navigate, user }) {
                 </View>
 
                 {[
-                  ['BVN', kyc?.bvn],
                   ['Phone', profile?.phone],
                   ['Email', profile?.email],
                   ['Date of birth', profile?.dob],
@@ -283,7 +279,7 @@ export default function BvnKYC({ navigate, user }) {
                     </View>
                   ))}
               </View>
-            */}
+            ) : null}
             {verified ? null : (
               <>
                 <View style={[styles.statusCard, styles.cardWarn, result ? { marginTop: 12 } : null]}>

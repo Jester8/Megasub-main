@@ -6,6 +6,7 @@ export const CATEGORY_STYLE = {
   utility_bills: { icon: 'flash-outline', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
   cable_subscription: { icon: 'tv-outline', color: '#EC4899', bg: 'rgba(236,72,153,0.08)' },
   result_checker: { icon: 'book-outline', color: '#10B981', bg: 'rgba(16,185,129,0.08)' },
+  wallet_funding: { icon: 'wallet-outline', color: '#16A34A', bg: 'rgba(22,163,74,0.08)' },
 };
 
 export const DEFAULT_STYLE = { icon: 'briefcase-outline', color: '#4A55DD', bg: 'rgba(74,85,221,0.08)' };
@@ -18,6 +19,20 @@ export const STATUS_COLOR = { '1': '#16A34A', '0': '#D97706', '-1': '#DC2626' };
 // electricity) — status is what the user scans for at a glance, not category.
 export const STATUS_BG = { '1': '#E6F7EC', '0': '#FFF6DE', '-1': '#FCE9E9' };
 
+export function isWalletFundingTransaction(transaction) {
+  return transaction?.transaction_category === 'wallet_funding';
+}
+
+export function transactionAmount(transaction) {
+  return Number(
+    transaction?.amount_settled ??
+    transaction?.amount_paid ??
+    transaction?.amount ??
+    transaction?.discounted_amount ??
+    0
+  ) || 0;
+}
+
 export const CATEGORY_OPTIONS = [
   { id: 'all', label: 'All Categories' },
   { id: 'airtime', label: 'Airtime' },
@@ -25,6 +40,7 @@ export const CATEGORY_OPTIONS = [
   { id: 'cable_subscription', label: 'Cable TV' },
   { id: 'utility_bills', label: 'Electricity' },
   { id: 'result_checker', label: 'Result Checker' },
+  { id: 'wallet_funding', label: 'Wallet Funding' },
 ];
 
 export const STATUS_OPTIONS = [

@@ -5,7 +5,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useReceiptShare from '../../../lib/useReceiptShare';
 import Receipt from './Receipt';
 import ShareButtons from './ShareButtons';
-import { CATEGORY_STYLE, DEFAULT_STYLE, isResultCheckerTransaction, STATUS_LABELS, formatDate } from '../../../lib/transactionMeta';
+import {
+  isResultCheckerTransaction,
+  isWalletFundingTransaction,
+  STATUS_LABELS,
+  formatDate,
+  transactionAmount,
+} from '../../../lib/transactionMeta';
 import { detectNetworkFromPhone } from '../../../lib/networkDetect';
 import { useResultCheckerTransactionsQuery, useSavedResultCheckerHistoryQuery } from '../../../lib/queries';
 import {
@@ -42,6 +48,7 @@ const CATEGORY_LABEL = {
   utility_bills: 'Electricity',
   cable_subscription: 'Cable TV',
   result_checker: 'Result Checker',
+  wallet_funding: 'Wallet Funding',
 };
 
 // Result checker purchases: fetch_transactions has neither the PINs nor the
@@ -88,16 +95,17 @@ export default function ReceiptModal({ visible, transaction, onClose, colors }) 
 
   if (!transaction) return null;
 
+  const isFunding = isWalletFundingTransaction(transaction);
   const statusIcon = STATUS_ICON[transaction.status] || STATUS_ICON['0'];
   const statusLabel = STATUS_LABELS[transaction.status] || 'Unknown';
   // `amount` is the face value actually purchased (e.g. ₦100 airtime);
   // `discounted_amount` is what was charged from the wallet (e.g. ₦98).
   // The headline shows what the customer bought, with the charge and the
   // bonus/discount broken out as their own rows when they differ.
-  const faceValue = Number(transaction.amount || 0);
-  const charged = Number(transaction.discounted_amount || transaction.amount || 0);
+  const faceValue = isFunding ? transactionAmount(transaction) : Number(transaction.amount || 0);
+  const charged = Number(transaction.discounted_amount || transaction.amount || transaction.amount_settled || 0);
   const amount = faceValue || charged;
-  const bonus = faceValue > charged ? faceValue - charged : 0;
+  const bonus = !isFunding && faceValue > charged ? faceValue - charged : 0;
   const category = isResultChecker ? 'Result Checker' : CATEGORY_LABEL[transaction.transaction_category] || 'Transaction';
   const recipient = transaction.phone_number || transaction.smart_card_number || transaction.metre_number;
   // fetch_transactions has no dedicated network field — product_plan_name
@@ -122,7 +130,12 @@ export default function ReceiptModal({ visible, transaction, onClose, colors }) 
         ]
       : []),
     { label: 'Status', value: statusLabel },
-    ...(transaction.txn_reference ? [{ label: 'Reference', value: transaction.txn_reference }] : []),
+    ...((transaction.txn_reference || transaction.reference || transaction.transaction_reference)
+      ? [{ label: 'Reference', value: transaction.txn_reference || transaction.reference || transaction.transaction_reference }]
+      : []),
+    ...((transaction.bank_name || transaction.bank)
+      ? [{ label: 'Bank', value: transaction.bank_name || transaction.bank }]
+      : []),
     { label: 'Date', value: formatDate(transaction.created_at) },
   ];
   const rows = isResultChecker
@@ -158,7 +171,7 @@ export default function ReceiptModal({ visible, transaction, onClose, colors }) 
             iconName={statusIcon.name}
             iconColor={statusIcon.color}
             iconBg={statusIcon.bg}
-            title={transaction.description || 'Transaction'}
+            title={transaction.description || (isFunding ? 'Wallet Funded' : 'Transaction')}
             amount={amount}
             rows={rows}
             colors={colors}

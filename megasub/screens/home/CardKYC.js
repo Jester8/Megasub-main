@@ -14,13 +14,13 @@ import {
 } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { fetchCardKycStatus, submitCardKyc } from '../../lib/api';
+import { fetchCardKycStatus, fetchKycStatus, submitCardKyc } from '../../lib/api';
 import { requireNetworkOrShowError } from '../../lib/network';
 import { useTheme } from '../../contexts/ThemeContext';
 import UnavailableNotice from './components/UnavailableNotice';
 
 import LogoLoader from './components/LogoLoader';
-import { requestErrorTitle } from '../../lib/format';
+import { extractBvnProfile, requestErrorTitle, toLocalNigerianPhone } from '../../lib/format';
 const FONTS = {
   regular: 'Montserrat_400Regular',
   medium: 'Montserrat_500Medium',
@@ -114,9 +114,38 @@ export default function CardKYC({ navigate, user }) {
   const loadStatus = async () => {
     setLoadingStatus(true);
     try {
-      const json = await fetchCardKycStatus(user?.id);
+      const [cardResult, bvnResult] = await Promise.allSettled([
+        fetchCardKycStatus(user?.id),
+        fetchKycStatus(),
+      ]);
+      if (cardResult.status === 'rejected') throw cardResult.reason;
+
+      const json = cardResult.value;
       setUnavailableMessage(null);
       setStatus(json?.data?.status || null);
+
+      if (bvnResult.status === 'fulfilled') {
+        const kycData = bvnResult.value?.data;
+        const isBvnVerified =
+          kycData?.verified === true ||
+          kycData?.status === 'verified' ||
+          kycData?.status?.verified === true ||
+          kycData?.status?.status === 'verified';
+        const profile = isBvnVerified ? extractBvnProfile(kycData) : null;
+        if (profile) {
+          const names = String(profile.fullName || '').trim().split(/\s+/).filter(Boolean);
+          const profileLastName = names.length > 1 ? names.pop() : '';
+          const profileFirstName = names.join(' ');
+          const profileDob = String(profile.dob || '').trim().slice(0, 10);
+
+          if (profileFirstName) setFirstName(profileFirstName);
+          if (profileLastName) setLastName(profileLastName);
+          if (/^\d{4}-\d{2}-\d{2}$/.test(profileDob)) setDob(profileDob);
+          if (profile.email) setEmail(profile.email);
+          const profilePhone = toLocalNigerianPhone(profile.phone);
+          if (profilePhone) setPhone(profilePhone);
+        }
+      }
     } catch (error) {
       // Provider not live yet: the form would just fail on submit, so it is
       // hidden behind a "coming soon" notice instead of offered.
